@@ -1,0 +1,138 @@
+# say ok? - Native Expression Checker
+
+Not translation—real expressions natives actually use.
+
+## Overview
+
+"say ok?" is a language learning tool that helps users choose natural, native-sounding expressions based on context. Instead of just translating, it acts like a bilingual native friend who shows you how natives actually say things.
+
+### Features
+
+- **Multiple expression options**: Safe/Standard, Strong/Direct, Casual, and Soft/Polite
+- **9 languages supported**: Japanese, English, Korean, Spanish, Chinese (Simplified & Traditional), French, Thai, Vietnamese
+- **Auto-detect input language**
+- **Text-to-Speech**: Google Cloud TTS (with browser fallback)
+- **Copy to clipboard**
+- **Responsive UI**
+
+## Tech Stack
+
+- **Frontend**: Next.js 16, React, TypeScript, Tailwind CSS
+- **Backend**: Next.js API Routes
+- **AI**: Anthropic Claude API
+- **TTS**: Google Cloud Text-to-Speech (optional)
+- **Database**: Supabase (optional, for future features)
+- **Deployment**: Vercel
+
+## Getting Started
+
+### Prerequisites
+
+- Node.js 18+
+- npm or yarn
+- Anthropic API key (required)
+- Google Cloud API key (optional, for better TTS)
+
+### Installation
+
+1. Clone the repository:
+```bash
+git clone https://github.com/your-username/sayok.git
+cd sayok
+```
+
+2. Install dependencies:
+```bash
+npm install
+```
+
+3. Set up environment variables:
+```bash
+cp .env.example .env.local
+```
+
+4. Edit `.env.local` and add your API keys:
+```env
+ANTHROPIC_API_KEY=your_anthropic_api_key_here
+GOOGLE_CLOUD_API_KEY=your_google_cloud_api_key_here  # Optional
+```
+
+5. Run the development server:
+```bash
+npm run dev
+```
+
+6. Open [http://localhost:3000](http://localhost:3000)
+
+## Getting API Keys
+
+### Anthropic API Key (Required)
+1. Go to [Anthropic Console](https://console.anthropic.com/)
+2. Sign up or log in
+3. Navigate to API Keys
+4. Create a new API key
+5. Copy and add to `.env.local`
+
+### Google Cloud TTS API Key (Optional)
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project (or select existing)
+3. Enable "Cloud Text-to-Speech API"
+4. Go to Credentials > Create Credentials > API Key
+5. Copy and add to `.env.local`
+
+Note: If Google Cloud TTS is not configured, the app will use the browser's built-in speech synthesis.
+
+## Deployment to Vercel
+
+### Option 1: Deploy via Vercel Dashboard
+
+1. Push your code to GitHub
+2. Go to [Vercel](https://vercel.com)
+3. Import your repository
+4. Add environment variables:
+   - `ANTHROPIC_API_KEY`: Your Anthropic API key
+   - `GOOGLE_CLOUD_API_KEY`: Your Google Cloud API key (optional)
+5. Deploy
+
+### Option 2: Deploy via CLI
+
+1. Install Vercel CLI:
+```bash
+npm i -g vercel
+```
+
+2. Login and deploy:
+```bash
+vercel
+```
+
+3. Add environment variables:
+```bash
+vercel env add ANTHROPIC_API_KEY
+```
+
+## Project Structure
+
+```
+sayok/
+├── src/
+│   ├── app/
+│   │   ├── api/
+│   │   │   ├── translate/    # Translation API (Anthropic)
+│   │   │   └── tts/          # Text-to-Speech API (Google Cloud)
+│   │   ├── layout.tsx
+│   │   ├── page.tsx
+│   │   └── globals.css
+│   ├── components/
+│   │   └── SayOK.tsx         # Main component
+│   └── lib/
+│       ├── translations.ts    # UI translations (9 languages)
+│       └── supabase.ts       # Supabase client (optional)
+├── .env.example
+├── vercel.json
+└── package.json
+```
+
+## License
+
+MIT
