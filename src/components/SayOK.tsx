@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Copy, Check, Sparkles, Volume2, MessageCircle, LogOut, User, History, X, Trash2, Maximize2 } from 'lucide-react';
 import { translations, languages, LanguageCode } from '@/lib/translations';
-import { supabase, getTranslationHistory, checkAuthHealth } from '@/lib/supabase';
+import { supabase, getTranslationHistory } from '@/lib/supabase';
 import type { User as AuthUser } from '@supabase/supabase-js';
 import type { TranslationHistoryRow } from '@/lib/supabase';
 
@@ -350,13 +350,12 @@ export default function SayOK() {
   const handleLogin = async () => {
     if (!supabase) return;
     setAuthUnavailable(false);
-    const ok = await checkAuthHealth();
-    if (!ok) {
-      setAuthUnavailable(true);
-      return;
-    }
     const redirectTo = typeof window !== 'undefined' ? `${window.location.origin}/auth/callback` : undefined;
-    await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo } });
+    const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo } });
+    if (error) {
+      console.error('Google sign-in failed:', error);
+      setAuthUnavailable(true);
+    }
   };
 
   const handleLogout = async () => {
