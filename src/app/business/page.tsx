@@ -32,6 +32,7 @@ const typographyByLang: Record<
     body: string;
     display: string;
     heading: CSSProperties;
+    heroHeading?: CSSProperties;
     price: CSSProperties;
   }
 > = {
@@ -58,6 +59,10 @@ const typographyByLang: Record<
       wordBreak: "keep-all",
       overflowWrap: "break-word",
     },
+    heroHeading: {
+      fontSize: "clamp(34px, 4.25vw, 58px)",
+      maxWidth: 620,
+    },
     price: {
       fontFamily: "'Noto Sans JP', 'Hiragino Sans', 'Yu Gothic', sans-serif",
       fontWeight: 800,
@@ -73,6 +78,10 @@ const typographyByLang: Record<
       wordBreak: "keep-all",
       overflowWrap: "break-word",
     },
+    heroHeading: {
+      fontSize: "clamp(34px, 4.4vw, 60px)",
+      maxWidth: 620,
+    },
     price: {
       fontFamily: "'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif",
       fontWeight: 800,
@@ -87,6 +96,10 @@ const typographyByLang: Record<
       fontWeight: 700,
       wordBreak: "keep-all",
       overflowWrap: "break-word",
+    },
+    heroHeading: {
+      fontSize: "clamp(34px, 4.4vw, 60px)",
+      maxWidth: 620,
     },
     price: {
       fontFamily: "'Noto Sans SC', 'PingFang SC', sans-serif",
@@ -1123,7 +1136,9 @@ export default function BusinessPage() {
         >
           <div>
             <p style={styles.eyebrow}>{t.hero.eyebrow}</p>
-            <h1 style={{ ...styles.heading, ...typography.heading }}>{t.hero.title}</h1>
+            <h1 style={{ ...styles.heading, ...typography.heading, ...typography.heroHeading }}>
+              {t.hero.title}
+            </h1>
             <p style={{ ...styles.subheading, maxWidth: 620 }}>{t.hero.body}</p>
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 30 }}>
               <a href="mailto:business@sayok.chat" style={styles.button}>
