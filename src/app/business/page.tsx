@@ -25,7 +25,6 @@ const langAliases: Record<string, Lang> = {
 };
 
 const baseUrl = "https://www.sayok.chat/business";
-const contactEmail = "info@kakehashi.tech";
 
 const typographyByLang: Record<
   Lang,
@@ -227,23 +226,23 @@ const styles: Record<string, CSSProperties> = {
 
 const copy = {
   en: {
-    metaTitle: "SayOK Business | Multilingual AI communication for teams",
+    metaTitle: "SayOK Pro | Multilingual AI communication for teams",
     nav: {
       features: "Features",
       useCases: "Use cases",
       pricing: "Pricing",
       faq: "FAQ",
-      cta: "Contact sales",
+      cta: "Start Pro",
     },
     hero: {
-      eyebrow: "SayOK Business",
-      title: "AI communication quality control for global teams.",
-      body: "SayOK Business helps sales, customer support, and operations teams rewrite messages before they are sent, making every reply clearer, warmer, and locally natural across English, Japanese, Korean, and Chinese.",
-      primary: "Talk to sales",
+      eyebrow: "SayOK Pro",
+      title: "Better messages before you send.",
+      body: "SayOK Pro is a subscription tool for rewriting important messages quickly. It helps you make drafts clearer, safer, and more natural without writing prompts from scratch.",
+      primary: "Start Pro",
       secondary: "See how it works",
       statOne: "4 languages",
       statTwo: "3 workflow modes",
-      statThree: "Team-ready",
+      statThree: "Self-serve Pro",
     },
     logos: {
       label: "Built for teams that communicate across borders",
@@ -281,8 +280,8 @@ const copy = {
     },
     features: {
       eyebrow: "Features",
-      title: "Make every business message ready to send.",
-      body: "SayOK adds a final communication layer before messages leave your company.",
+      title: "Purpose-built for pre-send checks.",
+      body: "SayOK keeps the workflow simple: paste a draft, choose the situation, and copy a safer version.",
       items: [
         {
           icon: "ti-language",
@@ -318,7 +317,7 @@ const copy = {
     },
     useCases: {
       eyebrow: "Use cases",
-      title: "Built for the messages that affect revenue and trust.",
+      title: "Use it when the message matters.",
       items: [
         {
           title: "Sales and partnerships",
@@ -360,27 +359,30 @@ const copy = {
     },
     pricing: {
       eyebrow: "Pricing",
-      title: "Choose the plan that matches your team.",
-      period: "per seat / month",
-      cta: "Contact sales",
+      title: "Simple subscription pricing.",
+      period: "",
+      cta: "Start",
       plans: [
         {
-          name: "Starter",
-          price: "$69",
-          description: "For small teams improving daily customer messages.",
-          features: ["Up to 5 seats", "EN/JA/KO/ZH rewriting", "Demo modes", "Email support"],
+          name: "Free",
+          price: "$0",
+          period: "",
+          description: "Try SayOK on short messages before you commit.",
+          features: ["Basic rewrite", "Guest usage", "Good for quick checks", "No subscription"],
         },
         {
-          name: "Business",
-          price: "$199",
-          description: "For growing teams standardizing external communication.",
-          features: ["Up to 25 seats", "Shared team guidelines", "Priority support", "Usage review"],
+          name: "Pro Monthly",
+          price: "$9",
+          period: "/ month",
+          description: "For people who use SayOK regularly at work.",
+          features: ["Higher message limit", "Pro tone variations", "Extended history", "Cancel anytime"],
         },
         {
-          name: "Enterprise",
-          price: "Custom",
-          description: "For organizations with advanced workflow and security needs.",
-          features: ["Custom seats", "Security review", "Dedicated onboarding", "Custom terms"],
+          name: "Pro Yearly",
+          price: "$90",
+          period: "/ year",
+          description: "For ongoing use with two months effectively free.",
+          features: ["Everything in Pro", "Best annual value", "Useful for daily work", "One subscription"],
         },
       ],
     },
@@ -390,51 +392,51 @@ const copy = {
       items: [
         {
           q: "Which languages are supported?",
-          a: "SayOK Business supports English, Japanese, Korean, and Chinese for the landing experience and core communication workflows.",
+          a: "SayOK Pro supports English, Japanese, Korean, and Chinese for the landing experience and core communication workflows.",
         },
         {
-          q: "Does SayOK replace our CRM or helpdesk?",
-          a: "No. SayOK is designed as a pre-send communication layer, so teams can improve copy before pasting it into their existing tools.",
+          q: "Why not just use ChatGPT?",
+          a: "SayOK is built for the moment before you send: paste a draft, choose the situation, and get send-ready wording without prompt writing.",
         },
         {
           q: "Can we use it for sensitive customer replies?",
           a: "Yes. It is especially useful for turning direct or emotional drafts into calm, respectful replies while preserving policy intent.",
         },
         {
-          q: "Do you offer enterprise plans?",
-          a: "Yes. Enterprise plans can include custom onboarding, security review, procurement support, and workflow guidance.",
+          q: "How do I subscribe?",
+          a: "Choose Pro and complete checkout with Stripe. You can use the monthly or yearly plan.",
         },
       ],
     },
     cta: {
-      title: "Bring clearer multilingual communication to your team.",
-      body: "Contact us to discuss seats, workflows, onboarding, and the right plan for your organization.",
-      button: "Email info@kakehashi.tech",
+      title: "Make the messages you actually send better.",
+      body: "Start with Pro when you need higher limits, saved history, and more reliable output for real work.",
+      button: "Start Pro",
     },
     footer: {
       tagline: "Make your message better before you send.",
-      contact: "Contact",
+      contact: "Start Pro",
       rights: "All rights reserved.",
     },
   },
   ja: {
-    metaTitle: "SayOK Business | グローバルチームのための多言語AIコミュニケーション",
+    metaTitle: "SayOK Pro | グローバルチームのための多言語AIコミュニケーション",
     nav: {
       features: "機能",
       useCases: "活用シーン",
       pricing: "料金",
       faq: "FAQ",
-      cta: "営業に相談",
+      cta: "Proを始める",
     },
     hero: {
-      eyebrow: "SayOK Business",
+      eyebrow: "SayOK Pro",
       title: "多言語メッセージを、送信前に整える。",
-      body: "SayOK Businessは、営業・カスタマーサポート・オペレーションチームが送信前のメッセージをより明確で、あたたかく、現地の言語感覚に合った表現へ整えるためのBtoB向けサービスです。英語・日本語・韓国語・中国語に対応しています。",
-      primary: "営業に相談する",
+      body: "SayOK Proは、大事なメッセージを送る前に、より自然で誤解されにくい表現へ整えるサブスク型ツールです。プロンプトを考えなくても、下書きを貼って用途を選ぶだけで使えます。",
+      primary: "Proを始める",
       secondary: "仕組みを見る",
       statOne: "4言語対応",
       statTwo: "3つの業務モード",
-      statThree: "チーム利用対応",
+      statThree: "サブスク型",
     },
     logos: {
       label: "国境を越えてコミュニケーションするチームのために",
@@ -460,7 +462,7 @@ const copy = {
           before:
             "規約外なので返金できません。利用規約を確認してください。",
           after:
-            "お問い合わせありがとうございます。ご不便をおかけしており申し訳ございません。今回のご注文は通常の返金期間を過ぎておりますが、詳細を確認したうえで、可能な対応がないか改めてご案内いたします。",
+            "ご連絡ありがとうございます。ご不便をおかけしており申し訳ございません。今回のご注文は通常の返金期間を過ぎておりますが、詳細を確認したうえで、可能な対応がないか改めてご案内いたします。",
         },
         negotiation: {
           before:
@@ -473,7 +475,7 @@ const copy = {
     features: {
       eyebrow: "Features",
       title: "外部メッセージを、安心して送れる品質へ。",
-      body: "SayOKは、企業から外部へ出るメッセージの直前に、最後のコミュニケーション品質レイヤーを追加します。",
+      body: "SayOKは、送る直前の文章をすばやく整えるためのシンプルなチェックレイヤーです。",
       items: [
         {
           icon: "ti-language",
@@ -509,11 +511,11 @@ const copy = {
     },
     useCases: {
       eyebrow: "Use cases",
-      title: "売上と信頼に影響するメッセージのために。",
+      title: "大事なメッセージほど、送る前に整える。",
       items: [
         {
-          title: "営業・パートナー連携",
-          body: "ラフなフォローアップ、提案、交渉メモを、次の会話につながる洗練された文面へ整えます。",
+          title: "仕事の連絡",
+          body: "ラフな依頼、確認、フォローアップを、相手に伝わりやすい文面へ整えます。",
         },
         {
           title: "カスタマーサポート",
@@ -527,7 +529,7 @@ const copy = {
     },
     testimonials: {
       eyebrow: "Testimonials",
-      title: "チームはSayOKでコミュニケーションリスクを減らしています。",
+      title: "プロンプトを書かずに、送信前の不安を減らす。",
       items: [
         {
           quote:
@@ -551,81 +553,84 @@ const copy = {
     },
     pricing: {
       eyebrow: "Pricing",
-      title: "チーム規模に合わせて選べる料金プラン。",
-      period: "1シート / 月",
-      cta: "相談する",
+      title: "シンプルなサブスク料金。",
+      period: "",
+      cta: "始める",
       plans: [
         {
-          name: "Starter",
-          price: "¥9,800",
-          description: "日々の顧客メッセージを改善したい小規模チーム向け。",
-          features: ["最大5シート", "EN/JA/KO/ZHリライト", "デモモード", "メールサポート"],
+          name: "Free",
+          price: "$0",
+          period: "",
+          description: "まずは短いメッセージで無料チェック。",
+          features: ["基本リライト", "ゲスト利用", "短文チェック向け", "サブスク不要"],
         },
         {
-          name: "Business",
-          price: "¥29,800",
-          description: "外部コミュニケーションを標準化したい成長チーム向け。",
-          features: ["最大25シート", "チームガイドライン共有", "優先サポート", "利用レビュー"],
+          name: "Pro Monthly",
+          price: "$9",
+          period: "/ 月",
+          description: "仕事で継続的に使う人向け。",
+          features: ["文字数上限アップ", "Proトーン提案", "履歴を長く保存", "いつでも解約可能"],
         },
         {
-          name: "Enterprise",
-          price: "個別見積もり",
-          description: "高度なワークフローやセキュリティ要件がある組織向け。",
-          features: ["カスタムシート数", "セキュリティレビュー", "専任オンボーディング", "個別契約条件"],
+          name: "Pro Yearly",
+          price: "$90",
+          period: "/ 年",
+          description: "毎日使うなら年額。実質2か月分お得です。",
+          features: ["Pro機能すべて", "年額割引", "日常業務向け", "1つのサブスク"],
         },
       ],
     },
     faq: {
       eyebrow: "FAQ",
-      title: "導入前によくある質問。",
+      title: "サブスク前によくある質問。",
       items: [
         {
           q: "対応言語は何ですか？",
-          a: "SayOK Businessは、ランディングページと主要なコミュニケーションワークフローで英語・日本語・韓国語・中国語に対応しています。",
+          a: "英語・日本語・韓国語・中国語に対応しています。入力言語と出力言語を分けて使えます。",
         },
         {
-          q: "CRMやヘルプデスクを置き換えるものですか？",
-          a: "いいえ。SayOKは送信前のコミュニケーション品質レイヤーです。既存ツールに貼り付ける前の文章改善に使えます。",
+          q: "ChatGPTと何が違いますか？",
+          a: "SayOKは送信直前の文章チェックに特化しています。プロンプトを書かずに、下書きを貼って用途を選ぶだけで、そのまま送りやすい表現に整えます。",
         },
         {
           q: "センシティブな顧客返信にも使えますか？",
           a: "はい。直接的すぎる下書きや感情的な文面を、方針を保ちながら落ち着いた丁寧な返信へ整える用途に向いています。",
         },
         {
-          q: "エンタープライズプランはありますか？",
-          a: "はい。個別オンボーディング、セキュリティレビュー、購買プロセス対応、業務フロー設計などに対応できます。",
+          q: "どうやって課金しますか？",
+          a: "Proを選ぶとStripeの決済画面に進みます。月額または年額プランを選べます。",
         },
       ],
     },
     cta: {
-      title: "多言語コミュニケーションを、もっと明確に。",
-      body: "シート数、業務フロー、オンボーディング、最適なプランについてお気軽にご相談ください。",
-      button: "info@kakehashi.tech に連絡",
+      title: "仕事で送るメッセージを、もっと確実に。",
+      body: "無料で試して、必要になったらProにアップグレードできます。",
+      button: "Proを始める",
     },
     footer: {
       tagline: "送る前に、メッセージをもっとよく。",
-      contact: "お問い合わせ",
+      contact: "Proを始める",
       rights: "All rights reserved.",
     },
   },
   ko: {
-    metaTitle: "SayOK Business | 글로벌 팀을 위한 다국어 AI 커뮤니케이션",
+    metaTitle: "SayOK Pro | 글로벌 팀을 위한 다국어 AI 커뮤니케이션",
     nav: {
       features: "기능",
       useCases: "활용 사례",
       pricing: "요금",
       faq: "FAQ",
-      cta: "영업팀 문의",
+      cta: "Pro 시작",
     },
     hero: {
-      eyebrow: "SayOK Business",
-      title: "글로벌 팀을 위한 AI 커뮤니케이션 품질 관리.",
-      body: "SayOK Business는 세일즈, 고객지원, 운영팀이 메시지를 보내기 전에 더 명확하고 따뜻하며 현지 언어에 자연스러운 표현으로 다듬도록 돕는 B2B 서비스입니다. 영어, 일본어, 한국어, 중국어를 지원합니다.",
-      primary: "영업팀에 문의",
+      eyebrow: "SayOK Pro",
+      title: "보내기 전, 메시지를 더 자연스럽게.",
+      body: "SayOK Pro는 중요한 메시지를 보내기 전에 더 명확하고 오해가 적은 표현으로 다듬는 구독형 도구입니다. 프롬프트를 직접 쓰지 않아도 초안을 붙여넣고 상황을 고르면 바로 사용할 수 있습니다.",
+      primary: "Pro 시작",
       secondary: "작동 방식 보기",
       statOne: "4개 언어",
       statTwo: "3가지 업무 모드",
-      statThree: "팀 사용 지원",
+      statThree: "셀프 구독",
     },
     logos: {
       label: "국경을 넘어 소통하는 팀을 위해",
@@ -663,8 +668,8 @@ const copy = {
     },
     features: {
       eyebrow: "Features",
-      title: "모든 비즈니스 메시지를 바로 보낼 수 있는 품질로.",
-      body: "SayOK는 회사 밖으로 나가는 메시지 직전에 마지막 커뮤니케이션 품질 레이어를 더합니다.",
+      title: "보내기 직전의 문장 확인에 집중했습니다.",
+      body: "SayOK는 초안을 붙여넣고 상황을 선택한 뒤, 더 안전하고 자연스러운 문장으로 바꾸는 단순한 흐름을 제공합니다.",
       items: [
         {
           icon: "ti-language",
@@ -700,11 +705,11 @@ const copy = {
     },
     useCases: {
       eyebrow: "Use cases",
-      title: "매출과 신뢰에 영향을 주는 메시지를 위해.",
+      title: "중요한 메시지일수록 보내기 전에 다듬으세요.",
       items: [
         {
-          title: "세일즈와 파트너십",
-          body: "거친 후속 메일, 제안서 문구, 협상 메모를 다음 대화로 이어지는 세련된 메시지로 바꿉니다.",
+          title: "업무 연락",
+          body: "거친 요청, 확인, 후속 연락을 상대가 이해하기 쉬운 문장으로 정리합니다.",
         },
         {
           title: "고객지원",
@@ -718,7 +723,7 @@ const copy = {
     },
     testimonials: {
       eyebrow: "Testimonials",
-      title: "팀은 SayOK로 커뮤니케이션 리스크를 줄입니다.",
+      title: "프롬프트 없이, 보내기 전 불안을 줄입니다.",
       items: [
         {
           quote:
@@ -742,27 +747,30 @@ const copy = {
     },
     pricing: {
       eyebrow: "Pricing",
-      title: "팀에 맞는 플랜을 선택하세요.",
-      period: "좌석당 / 월",
-      cta: "영업팀 문의",
+      title: "간단한 구독 요금제.",
+      period: "",
+      cta: "시작하기",
       plans: [
         {
-          name: "Starter",
-          price: "$69",
-          description: "일상적인 고객 메시지를 개선하려는 소규모 팀용.",
-          features: ["최대 5석", "EN/JA/KO/ZH 리라이팅", "데모 모드", "이메일 지원"],
+          name: "Free",
+          price: "$0",
+          period: "",
+          description: "짧은 메시지부터 무료로 확인해 보세요.",
+          features: ["기본 리라이트", "게스트 이용", "짧은 문장 확인용", "구독 불필요"],
         },
         {
-          name: "Business",
-          price: "$199",
-          description: "외부 커뮤니케이션을 표준화하려는 성장 팀용.",
-          features: ["최대 25석", "팀 가이드라인 공유", "우선 지원", "사용량 리뷰"],
+          name: "Pro Monthly",
+          price: "$9",
+          period: "/ 월",
+          description: "업무에서 꾸준히 사용하는 사람을 위한 플랜.",
+          features: ["글자 수 한도 증가", "Pro 톤 제안", "더 긴 히스토리 저장", "언제든 취소 가능"],
         },
         {
-          name: "Enterprise",
-          price: "Custom",
-          description: "고급 워크플로와 보안 요구사항이 있는 조직용.",
-          features: ["맞춤 좌석 수", "보안 검토", "전담 온보딩", "맞춤 계약 조건"],
+          name: "Pro Yearly",
+          price: "$90",
+          period: "/ 년",
+          description: "매일 사용한다면 연간 플랜이 더 좋습니다.",
+          features: ["Pro 기능 전체", "연간 할인", "일상 업무용", "하나의 구독"],
         },
       ],
     },
@@ -772,51 +780,51 @@ const copy = {
       items: [
         {
           q: "어떤 언어를 지원하나요?",
-          a: "SayOK Business는 랜딩 경험과 핵심 커뮤니케이션 워크플로에서 영어, 일본어, 한국어, 중국어를 지원합니다.",
+          a: "SayOK Pro는 랜딩 경험과 핵심 커뮤니케이션 워크플로에서 영어, 일본어, 한국어, 중국어를 지원합니다.",
         },
         {
-          q: "CRM이나 헬프데스크를 대체하나요?",
-          a: "아니요. SayOK는 보내기 전 커뮤니케이션 레이어로 설계되어 기존 도구에 붙여넣기 전에 문장을 개선하는 데 사용합니다.",
+          q: "ChatGPT와 무엇이 다른가요?",
+          a: "SayOK는 보내기 직전의 문장 확인에 특화되어 있습니다. 프롬프트를 쓰지 않고 초안을 붙여넣고 상황을 고르면 바로 보내기 쉬운 문장으로 다듬습니다.",
         },
         {
           q: "민감한 고객 답변에도 사용할 수 있나요?",
           a: "네. 직접적이거나 감정적인 초안을 정책 의도는 유지하면서 차분하고 존중 있는 답변으로 바꾸는 데 특히 유용합니다.",
         },
         {
-          q: "엔터프라이즈 플랜이 있나요?",
-          a: "네. 맞춤 온보딩, 보안 검토, 구매 프로세스 지원, 워크플로 가이드를 포함할 수 있습니다.",
+          q: "구독은 어떻게 하나요?",
+          a: "Pro를 선택하면 Stripe 결제 화면으로 이동합니다. 월간 또는 연간 플랜을 선택할 수 있습니다.",
         },
       ],
     },
     cta: {
-      title: "팀의 다국어 커뮤니케이션을 더 명확하게 만드세요.",
-      body: "좌석 수, 워크플로, 온보딩, 조직에 맞는 플랜에 대해 상담해 보세요.",
-      button: "info@kakehashi.tech로 문의",
+      title: "실제로 보내는 메시지를 더 좋게 만드세요.",
+      body: "무료로 사용해 보고, 한도가 필요해지면 Pro로 업그레이드하세요.",
+      button: "Pro 시작",
     },
     footer: {
       tagline: "보내기 전에 메시지를 더 좋게.",
-      contact: "문의",
+      contact: "Pro 시작",
       rights: "All rights reserved.",
     },
   },
   zh: {
-    metaTitle: "SayOK Business | 面向全球团队的多语言 AI 沟通工具",
+    metaTitle: "SayOK Pro | 面向全球团队的多语言 AI 沟通工具",
     nav: {
       features: "功能",
       useCases: "使用场景",
       pricing: "价格",
       faq: "FAQ",
-      cta: "联系销售",
+      cta: "开始 Pro",
     },
     hero: {
-      eyebrow: "SayOK Business",
-      title: "面向全球团队的 AI 沟通质量管理。",
-      body: "SayOK Business 帮助销售、客服和运营团队在发送前优化信息，让每一次回复都更清晰、更温和，并符合英语、日语、韩语和中文的本地表达习惯。",
-      primary: "联系销售",
+      eyebrow: "SayOK Pro",
+      title: "发送前，让消息更自然。",
+      body: "SayOK Pro 是一款订阅工具，帮助你在发送重要消息前，把草稿改得更清晰、更自然，也更不容易引起误解。无需自己写提示词，粘贴草稿并选择场景即可使用。",
+      primary: "开始 Pro",
       secondary: "了解如何运作",
       statOne: "4 种语言",
       statTwo: "3 种工作模式",
-      statThree: "适合团队使用",
+      statThree: "自助订阅",
     },
     logos: {
       label: "为跨境沟通团队而打造",
@@ -854,8 +862,8 @@ const copy = {
     },
     features: {
       eyebrow: "Features",
-      title: "让每一条商务信息都达到可发送的质量。",
-      body: "SayOK 在公司对外发送信息前，增加最后一层沟通质量检查。",
+      title: "专注于发送前的快速检查。",
+      body: "SayOK 保持流程简单：粘贴草稿、选择场景，然后复制更自然、更安全的版本。",
       items: [
         {
           icon: "ti-language",
@@ -891,11 +899,11 @@ const copy = {
     },
     useCases: {
       eyebrow: "Use cases",
-      title: "为影响收入与信任的信息而设计。",
+      title: "越重要的消息，越值得发送前整理。",
       items: [
         {
-          title: "销售与合作伙伴",
-          body: "将粗略的跟进、提案和谈判记录整理成专业信息，推动下一步对话。",
+          title: "工作沟通",
+          body: "把粗略的请求、确认和跟进内容整理成更容易理解的表达。",
         },
         {
           title: "客户支持",
@@ -909,7 +917,7 @@ const copy = {
     },
     testimonials: {
       eyebrow: "Testimonials",
-      title: "团队使用 SayOK 来降低沟通风险。",
+      title: "不用写提示词，也能减少发送前的不安。",
       items: [
         {
           quote:
@@ -933,27 +941,30 @@ const copy = {
     },
     pricing: {
       eyebrow: "Pricing",
-      title: "选择适合团队的方案。",
-      period: "每席 / 月",
-      cta: "联系销售",
+      title: "简单的订阅价格。",
+      period: "",
+      cta: "开始使用",
       plans: [
         {
-          name: "Starter",
-          price: "$69",
-          description: "适合希望改善日常客户信息的小型团队。",
-          features: ["最多 5 个席位", "EN/JA/KO/ZH 改写", "演示模式", "邮件支持"],
+          name: "Free",
+          price: "$0",
+          period: "",
+          description: "先免费检查短消息。",
+          features: ["基础改写", "游客可用", "适合短文检查", "无需订阅"],
         },
         {
-          name: "Business",
-          price: "$199",
-          description: "适合希望标准化对外沟通的成长型团队。",
-          features: ["最多 25 个席位", "共享团队指南", "优先支持", "使用情况回顾"],
+          name: "Pro Monthly",
+          price: "$9",
+          period: "/ 月",
+          description: "适合经常在工作中使用。",
+          features: ["更高字数上限", "Pro 语气建议", "更长历史记录", "可随时取消"],
         },
         {
-          name: "Enterprise",
-          price: "Custom",
-          description: "适合有高级工作流和安全需求的组织。",
-          features: ["自定义席位", "安全审查", "专属 onboarding", "自定义条款"],
+          name: "Pro Yearly",
+          price: "$90",
+          period: "/ 年",
+          description: "适合日常使用，年付更划算。",
+          features: ["全部 Pro 功能", "年付优惠", "适合日常工作", "一个订阅"],
         },
       ],
     },
@@ -963,30 +974,30 @@ const copy = {
       items: [
         {
           q: "支持哪些语言？",
-          a: "SayOK Business 在落地页体验和核心沟通工作流中支持英语、日语、韩语和中文。",
+          a: "SayOK Pro 在落地页体验和核心沟通工作流中支持英语、日语、韩语和中文。",
         },
         {
-          q: "SayOK 会替代 CRM 或客服系统吗？",
-          a: "不会。SayOK 是发送前的沟通优化层，帮助团队在粘贴到现有工具前改进文案。",
+          q: "和 ChatGPT 有什么不同？",
+          a: "SayOK 专注于发送前的文字检查。无需写提示词，只要粘贴草稿并选择场景，就能得到更适合直接发送的表达。",
         },
         {
           q: "可以用于敏感的客户回复吗？",
           a: "可以。它特别适合把直接或带情绪的草稿，在保留政策意图的同时改写为冷静、尊重的回复。",
         },
         {
-          q: "是否提供企业方案？",
-          a: "是的。企业方案可包括定制 onboarding、安全审查、采购支持和工作流指导。",
+          q: "如何订阅？",
+          a: "选择 Pro 后会进入 Stripe 结账页面。你可以选择月付或年付。",
         },
       ],
     },
     cta: {
-      title: "让团队的多语言沟通更清晰。",
-      body: "联系我们，讨论席位、工作流、onboarding 以及适合贵组织的方案。",
-      button: "发送邮件至 info@kakehashi.tech",
+      title: "让你真正要发送的消息更好。",
+      body: "可以先免费使用，需要更高额度时再升级到 Pro。",
+      button: "开始 Pro",
     },
     footer: {
       tagline: "发送前，让信息更好。",
-      contact: "联系",
+      contact: "开始 Pro",
       rights: "All rights reserved.",
     },
   },
@@ -1072,7 +1083,7 @@ export default function BusinessPage() {
             >
               S
             </span>
-            SayOK Business
+            SayOK Pro
           </a>
 
           <div style={styles.navLinks}>
@@ -1114,7 +1125,7 @@ export default function BusinessPage() {
                 );
               })}
             </div>
-            <a href={`mailto:${contactEmail}`} style={{ ...styles.button, minHeight: 42 }}>
+            <a href="/pro" style={{ ...styles.button, minHeight: 42 }}>
               {t.nav.cta}
             </a>
           </div>
@@ -1138,7 +1149,7 @@ export default function BusinessPage() {
             </h1>
             <p style={{ ...styles.subheading, maxWidth: 620 }}>{t.hero.body}</p>
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 30 }}>
-              <a href={`mailto:${contactEmail}`} style={styles.button}>
+              <a href="/pro" style={styles.button}>
                 {t.hero.primary}
               </a>
               <a href="#demo" style={styles.secondaryButton}>
@@ -1366,9 +1377,9 @@ export default function BusinessPage() {
                 >
                   {plan.price}
                 </strong>
-                {plan.price !== "Custom" && plan.price !== "個別見積もり" ? (
-                  <span style={{ color: "#888780", fontSize: 13 }}>{t.pricing.period}</span>
-                ) : null}
+                <span style={{ color: "#888780", fontSize: 13 }}>
+                  {"period" in plan ? plan.period : t.pricing.period}
+                </span>
               </div>
               <p style={{ color: "#55544f", lineHeight: 1.7, minHeight: 58 }}>{plan.description}</p>
               <ul style={{ listStyle: "none", padding: 0, margin: "20px 0 24px", display: "grid", gap: 10 }}>
@@ -1381,7 +1392,7 @@ export default function BusinessPage() {
                   </li>
                 ))}
               </ul>
-              <a href={`mailto:${contactEmail}`} style={{ ...styles.button, width: "100%" }}>
+              <a href={index === 0 ? "/" : "/pro"} style={{ ...styles.button, width: "100%" }}>
                 {t.pricing.cta}
               </a>
             </article>
@@ -1460,7 +1471,7 @@ export default function BusinessPage() {
             <p style={{ color: "rgba(255,255,255,0.78)", lineHeight: 1.75, margin: 0 }}>{t.cta.body}</p>
           </div>
           <a
-            href={`mailto:${contactEmail}`}
+            href="/pro"
             style={{ ...styles.button, background: "#ffffff", color: "#042C53", borderColor: "#ffffff" }}
           >
             {t.cta.button}
@@ -1481,12 +1492,12 @@ export default function BusinessPage() {
           }}
         >
           <div>
-            <strong style={{ color: "#042C53" }}>SayOK Business</strong>
+            <strong style={{ color: "#042C53" }}>SayOK Pro</strong>
             <div style={{ marginTop: 6 }}>{t.footer.tagline}</div>
           </div>
           <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-            <a href={`mailto:${contactEmail}`} style={{ color: "#185FA5", fontWeight: 800 }}>
-              {t.footer.contact}: {contactEmail}
+            <a href="/pro" style={{ color: "#185FA5", fontWeight: 800 }}>
+              {t.footer.contact}
             </a>
             <span>
               © {currentYear} SayOK. {t.footer.rights}
