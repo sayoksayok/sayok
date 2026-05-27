@@ -2,26 +2,42 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Check, Sparkles, Zap, History, MousePointer } from 'lucide-react';
+import { ArrowLeft, Check, Loader2, ShieldCheck, Sparkles, Zap } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import type { User as AuthUser } from '@supabase/supabase-js';
 
+type BillingPlan = 'monthly' | 'yearly';
+
+const features = [
+  'Higher message limits for real work',
+  'Pro tone variations for sensitive messages',
+  'Extended history for repeated use',
+  'Monthly or yearly subscription',
+];
+
 export default function ProPage() {
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [loadingPlan, setLoadingPlan] = useState<BillingPlan | null>(null);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     if (!supabase) return;
+
     supabase.auth.getUser().then(({ data: { user } }) => {
       setUser(user ?? null);
     });
   }, []);
 
-  const handleUpgrade = async (plan: 'monthly' | 'yearly' = 'monthly') => {
+  const handleUpgrade = async (plan: BillingPlan) => {
+    setError('');
+
     if (!user) {
-      // Redirect to home to sign in
       window.location.href = '/';
       return;
     }
+
+    setLoadingPlan(plan);
+
     try {
       const response = await fetch('/api/stripe/checkout', {
         method: 'POST',
@@ -29,130 +45,156 @@ export default function ProPage() {
         body: JSON.stringify({ plan, userId: user.id }),
       });
       const data = await response.json();
-      if (data?.url) {
-        window.location.href = data.url;
+
+      if (!response.ok || !data?.url) {
+        throw new Error(data?.error || 'Checkout is temporarily unavailable.');
       }
+
+      window.location.href = data.url;
     } catch (err) {
-      console.error('Upgrade error:', err);
+      setError(err instanceof Error ? err.message : 'Checkout is temporarily unavailable.');
+      setLoadingPlan(null);
     }
   };
 
-  const features = [
-    { icon: Zap, text: 'Best, Safe, Engaging + SNS when it fits', desc: 'Structured rewrites for DMs, email, and social—not a generic grammar checker.' },
-    { icon: Sparkles, text: 'Pro tone variations', desc: 'Casual, emotional, and professional lines—clearly different, not tiny edits.' },
-    { icon: Zap, text: 'Higher limits for real work', desc: 'Up to 2,000 characters per message and 100 server-tracked checks per day.' },
-    { icon: History, text: 'Extended history', desc: '300 items—sidebar, reload, and delete.' },
-  ];
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-50 via-amber-50 to-pink-50">
-      <header className="bg-white/90 backdrop-blur-xl border-b border-orange-100/50 sticky top-0 z-50 shadow-sm">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-3 sm:py-4 flex items-center justify-between">
-          <Link
-            href="/"
-            className="text-xl sm:text-2xl font-extrabold bg-gradient-to-r from-orange-500 via-pink-500 to-rose-500 bg-clip-text text-transparent hover:opacity-90 transition-opacity"
-          >
-            SayOK
+    <main className="min-h-screen bg-white text-[#1a1a18]">
+      <header className="border-b border-[#042C53]/10 bg-white">
+        <div className="mx-auto flex min-h-20 w-[min(1080px,calc(100%-32px))] items-center justify-between gap-4">
+          <Link href="/" className="flex items-center gap-3 text-xl font-extrabold text-[#042C53]">
+            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#185FA5] text-white">
+              S
+            </span>
+            SayOK Pro
           </Link>
-          <Link
-            href="/"
-            className="inline-flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-orange-600 transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Home
+          <Link href="/" className="inline-flex items-center gap-2 text-sm font-bold text-[#185FA5]">
+            <ArrowLeft className="h-4 w-4" />
+            Back to SayOK
           </Link>
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-14 lg:py-18">
-        {/* Hero */}
-        <div className="text-center mb-10 sm:mb-14">
-          <span className="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-gradient-to-r from-orange-100 to-rose-100 text-orange-700 mb-4">
-            For work
-          </span>
-          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-gray-800 mb-3 tracking-tight">
-            SayOK <span className="bg-gradient-to-r from-orange-500 via-pink-500 to-rose-500 bg-clip-text text-transparent">Pro</span>
+      <section className="mx-auto grid w-[min(1080px,calc(100%-32px))] gap-10 py-16 lg:grid-cols-[1.05fr_0.95fr] lg:items-start lg:py-24">
+        <div>
+          <p className="mb-4 text-xs font-extrabold uppercase tracking-[0.08em] text-[#185FA5]">
+            Subscription
+          </p>
+          <h1 className="mb-5 max-w-2xl text-4xl font-extrabold leading-tight tracking-[-0.02em] text-[#042C53] sm:text-5xl">
+            Better messages when the message actually matters.
           </h1>
-          <p className="text-gray-600 text-lg sm:text-xl max-w-xl mx-auto mb-2">
-            Unlock the full output stack—social-style rewrites when they fit, Pro variations, and higher daily limits enforced on the server.
+          <p className="max-w-2xl text-lg leading-8 text-[#55544f]">
+            SayOK Pro gives you higher limits, clearer tone options, and saved history so you can
+            improve important messages without writing prompts from scratch.
           </p>
-          <p className="text-gray-700 font-medium text-base sm:text-lg">
-            Use this when the message actually matters.
-          </p>
+
+          <div className="mt-8 grid gap-3 sm:grid-cols-2">
+            {features.map((feature) => (
+              <div key={feature} className="flex items-start gap-3 rounded-lg border border-[#042C53]/10 p-4">
+                <Check className="mt-0.5 h-5 w-5 shrink-0 text-[#185FA5]" />
+                <span className="font-semibold text-[#042C53]">{feature}</span>
+              </div>
+            ))}
+          </div>
+
+          {!user ? (
+            <div className="mt-8 rounded-lg border border-[#185FA5]/20 bg-[#E6F1FB] p-4 text-sm font-semibold text-[#042C53]">
+              Sign in first, then choose a Pro subscription.
+            </div>
+          ) : null}
+
+          {error ? (
+            <div className="mt-8 rounded-lg border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">
+              {error}
+            </div>
+          ) : null}
         </div>
 
-        {/* Features */}
-        <div className="grid sm:grid-cols-2 gap-4 sm:gap-5 mb-10 sm:mb-14">
-          {features.map(({ icon: Icon, text, desc }) => (
-            <div
-              key={text}
-              className="flex gap-4 p-4 sm:p-5 bg-white rounded-2xl border-2 border-orange-100 shadow-sm hover:shadow-md hover:border-orange-200 transition-all"
-            >
-              <div className="w-11 h-11 shrink-0 rounded-xl bg-gradient-to-br from-orange-100 to-pink-100 flex items-center justify-center">
-                <Icon className="w-5 h-5 text-orange-500" />
-              </div>
-              <div>
-                <p className="font-semibold text-gray-800">{text}</p>
-                <p className="text-sm text-gray-500 mt-0.5">{desc}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Pricing */}
-        <div className="mb-10 sm:mb-12">
-          <h2 className="text-lg font-bold text-gray-800 mb-4">Choose your plan</h2>
-          <div className="grid sm:grid-cols-2 gap-4 sm:gap-6">
-            <div className="bg-white rounded-2xl border-2 border-orange-100 shadow-lg shadow-orange-100/20 p-6 sm:p-8 hover:border-orange-200 transition-colors">
-              <p className="text-3xl sm:text-4xl font-extrabold text-gray-800">
-                $9 <span className="text-lg font-normal text-gray-500">/ month</span>
-              </p>
-              <p className="text-sm text-gray-500 mt-1">Billed monthly</p>
-              <p className="text-sm text-gray-600 mt-4">Flexible. Cancel anytime.</p>
-            </div>
-            <div className="relative bg-white rounded-2xl border-2 border-orange-200 shadow-lg shadow-orange-100/30 p-6 sm:p-8 hover:border-orange-300 transition-colors">
-              <span className="absolute -top-2.5 right-4 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500 text-white">
-                Save
-              </span>
-              <p className="text-3xl sm:text-4xl font-extrabold text-gray-800">
-                $90 <span className="text-lg font-normal text-gray-500">/ year</span>
-              </p>
-              <p className="text-sm text-gray-500 mt-1">Save when you pay yearly</p>
-              <p className="text-sm text-emerald-600 font-medium mt-4">2 months free</p>
-            </div>
+        <div className="grid gap-4">
+          <PricingCard
+            title="Pro Monthly"
+            price="$9"
+            period="/ month"
+            description="Flexible monthly billing. Good when you want to try Pro on real work."
+            icon={<Zap className="h-5 w-5" />}
+            loading={loadingPlan === 'monthly'}
+            onClick={() => handleUpgrade('monthly')}
+          />
+          <PricingCard
+            title="Pro Yearly"
+            price="$90"
+            period="/ year"
+            description="Best value for daily use. Two months effectively free."
+            icon={<Sparkles className="h-5 w-5" />}
+            badge="Best value"
+            featured
+            loading={loadingPlan === 'yearly'}
+            onClick={() => handleUpgrade('yearly')}
+          />
+          <div className="flex items-center gap-3 rounded-lg border border-[#042C53]/10 p-4 text-sm text-[#55544f]">
+            <ShieldCheck className="h-5 w-5 shrink-0 text-[#185FA5]" />
+            Payment is handled by Stripe. You can cancel from your subscription settings.
           </div>
         </div>
+      </section>
+    </main>
+  );
+}
 
-        {/* CTA */}
-        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-          <button
-            type="button"
-            onClick={() => handleUpgrade('monthly')}
-            className="inline-flex items-center justify-center gap-2 px-8 py-4 sm:py-5 bg-gradient-to-r from-orange-500 via-pink-500 to-rose-500 text-white font-bold rounded-2xl hover:from-orange-400 hover:via-pink-400 hover:to-rose-400 transition-all shadow-lg shadow-orange-200/40 hover:shadow-xl hover:shadow-orange-200/50 hover:-translate-y-0.5"
-          >
-            <Sparkles className="w-5 h-5" />
-            Start Pro
-          </button>
-          <button
-            type="button"
-            onClick={() => handleUpgrade('yearly')}
-            className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-white text-orange-600 font-semibold rounded-xl border border-orange-200 hover:bg-orange-50 transition-colors"
-          >
-            <Check className="w-4 h-4" />
-            Choose yearly (save)
-          </button>
+function PricingCard({
+  title,
+  price,
+  period,
+  description,
+  icon,
+  badge,
+  featured,
+  loading,
+  onClick,
+}: {
+  title: string;
+  price: string;
+  period: string;
+  description: string;
+  icon: React.ReactNode;
+  badge?: string;
+  featured?: boolean;
+  loading: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <article
+      className={[
+        'rounded-lg bg-white p-6 shadow-[0_14px_36px_rgba(4,44,83,0.06)]',
+        featured ? 'border-2 border-[#185FA5]' : 'border border-[#042C53]/10',
+      ].join(' ')}
+    >
+      <div className="mb-5 flex items-start justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#E6F1FB] text-[#185FA5]">
+            {icon}
+          </span>
+          <h2 className="text-xl font-extrabold text-[#042C53]">{title}</h2>
         </div>
-
-        <div className="mt-12 pt-8 border-t border-orange-100">
-          <Link
-            href="/"
-            className="inline-flex items-center gap-2 text-orange-600 hover:text-orange-700 font-semibold transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Back to SayOK
-          </Link>
-        </div>
-      </main>
-    </div>
+        {badge ? (
+          <span className="rounded-full bg-[#E6F1FB] px-3 py-1 text-xs font-extrabold text-[#185FA5]">
+            {badge}
+          </span>
+        ) : null}
+      </div>
+      <div className="mb-3 flex items-baseline gap-2">
+        <strong className="text-5xl font-extrabold leading-none text-[#185FA5]">{price}</strong>
+        <span className="text-sm font-semibold text-[#888780]">{period}</span>
+      </div>
+      <p className="mb-6 leading-7 text-[#55544f]">{description}</p>
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={loading}
+        className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-[#185FA5] px-5 font-extrabold text-white transition hover:bg-[#042C53] disabled:cursor-not-allowed disabled:opacity-70"
+      >
+        {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+        Start Pro
+      </button>
+    </article>
   );
 }
