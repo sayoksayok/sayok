@@ -25,42 +25,42 @@ const langAliases: Record<string, Lang> = {
 };
 
 const baseUrl = "https://www.sayok.chat/business";
+const contactEmail = "info@kakehashi.tech";
 
 const typographyByLang: Record<
   Lang,
   {
     body: string;
-    display: string;
     heading: CSSProperties;
     heroHeading?: CSSProperties;
     price: CSSProperties;
   }
 > = {
   en: {
-    body: "'DM Sans', Arial, sans-serif",
-    display: "'DM Serif Display', Georgia, serif",
+    body: "'Noto Sans', Arial, sans-serif",
     heading: {
-      fontFamily: "'DM Serif Display', Georgia, serif",
-      lineHeight: 0.98,
-      fontWeight: 400,
+      fontFamily: "'Noto Sans', Arial, sans-serif",
+      lineHeight: 1.14,
+      fontWeight: 800,
+      letterSpacing: "-0.02em",
     },
     price: {
-      fontFamily: "'DM Serif Display', Georgia, serif",
-      fontWeight: 400,
+      fontFamily: "'Noto Sans', Arial, sans-serif",
+      fontWeight: 800,
     },
   },
   ja: {
     body: "'Noto Sans JP', 'Hiragino Sans', 'Yu Gothic', 'Meiryo', sans-serif",
-    display: "'Noto Serif JP', 'Hiragino Mincho ProN', 'Yu Mincho', serif",
     heading: {
-      fontFamily: "'Noto Serif JP', 'Hiragino Mincho ProN', 'Yu Mincho', serif",
-      lineHeight: 1.22,
-      fontWeight: 700,
+      fontFamily: "'Noto Sans JP', 'Hiragino Sans', 'Yu Gothic', 'Meiryo', sans-serif",
+      lineHeight: 1.28,
+      fontWeight: 800,
+      letterSpacing: "-0.01em",
       wordBreak: "keep-all",
       overflowWrap: "break-word",
     },
     heroHeading: {
-      fontSize: "clamp(34px, 4.25vw, 58px)",
+      fontSize: "clamp(32px, 4vw, 48px)",
       maxWidth: 620,
     },
     price: {
@@ -70,16 +70,16 @@ const typographyByLang: Record<
   },
   ko: {
     body: "'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif",
-    display: "'Noto Serif KR', 'AppleMyungjo', serif",
     heading: {
-      fontFamily: "'Noto Serif KR', 'AppleMyungjo', serif",
-      lineHeight: 1.18,
-      fontWeight: 700,
+      fontFamily: "'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif",
+      lineHeight: 1.22,
+      fontWeight: 800,
+      letterSpacing: "-0.01em",
       wordBreak: "keep-all",
       overflowWrap: "break-word",
     },
     heroHeading: {
-      fontSize: "clamp(34px, 4.4vw, 60px)",
+      fontSize: "clamp(32px, 4vw, 50px)",
       maxWidth: 620,
     },
     price: {
@@ -89,16 +89,16 @@ const typographyByLang: Record<
   },
   zh: {
     body: "'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif",
-    display: "'Noto Serif SC', 'Songti SC', serif",
     heading: {
-      fontFamily: "'Noto Serif SC', 'Songti SC', serif",
-      lineHeight: 1.18,
-      fontWeight: 700,
+      fontFamily: "'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif",
+      lineHeight: 1.22,
+      fontWeight: 800,
+      letterSpacing: "-0.01em",
       wordBreak: "keep-all",
       overflowWrap: "break-word",
     },
     heroHeading: {
-      fontSize: "clamp(34px, 4.4vw, 60px)",
+      fontSize: "clamp(32px, 4vw, 50px)",
       maxWidth: 620,
     },
     price: {
@@ -111,19 +111,19 @@ const typographyByLang: Record<
 const styles: Record<string, CSSProperties> = {
   page: {
     minHeight: "100vh",
-    background: "#fbfdff",
+    background: "#ffffff",
     color: "#1a1a18",
-    fontFamily: "'DM Sans', Arial, sans-serif",
+    fontFamily: "'Noto Sans', Arial, sans-serif",
   },
   container: {
-    width: "min(1120px, calc(100% - 32px))",
+    width: "min(1080px, calc(100% - 32px))",
     margin: "0 auto",
   },
   nav: {
     position: "sticky",
     top: 0,
     zIndex: 20,
-    background: "rgba(251, 253, 255, 0.94)",
+    background: "rgba(255, 255, 255, 0.96)",
     backdropFilter: "blur(18px)",
     borderBottom: "1px solid rgba(4, 44, 83, 0.09)",
   },
@@ -163,7 +163,7 @@ const styles: Record<string, CSSProperties> = {
     background: "#ffffff",
   },
   section: {
-    padding: "92px 0",
+    padding: "76px 0",
   },
   eyebrow: {
     color: "#185FA5",
@@ -174,17 +174,18 @@ const styles: Record<string, CSSProperties> = {
     marginBottom: 14,
   },
   heading: {
-    fontFamily: "'DM Serif Display', Georgia, serif",
+    fontFamily: "'Noto Sans', Arial, sans-serif",
     color: "#042C53",
-    fontSize: "clamp(36px, 5vw, 68px)",
-    lineHeight: 1.04,
-    letterSpacing: 0,
+    fontSize: "clamp(34px, 4.6vw, 58px)",
+    lineHeight: 1.14,
+    letterSpacing: "-0.02em",
     margin: "0 0 22px",
+    fontWeight: 800,
   },
   subheading: {
     color: "#4d4c47",
-    fontSize: 18,
-    lineHeight: 1.75,
+    fontSize: 17,
+    lineHeight: 1.8,
     margin: 0,
   },
   button: {
@@ -220,7 +221,7 @@ const styles: Record<string, CSSProperties> = {
     background: "#ffffff",
     border: "1px solid rgba(4, 44, 83, 0.10)",
     borderRadius: 8,
-    boxShadow: "0 24px 70px rgba(4, 44, 83, 0.10)",
+    boxShadow: "0 14px 36px rgba(4, 44, 83, 0.06)",
   },
 };
 
@@ -408,7 +409,7 @@ const copy = {
     cta: {
       title: "Bring clearer multilingual communication to your team.",
       body: "Contact us to discuss seats, workflows, onboarding, and the right plan for your organization.",
-      button: "Email business@sayok.chat",
+      button: "Email info@kakehashi.tech",
     },
     footer: {
       tagline: "Make your message better before you send.",
@@ -599,7 +600,7 @@ const copy = {
     cta: {
       title: "チームの多言語コミュニケーションを、もっと明確に。",
       body: "シート数、業務フロー、オンボーディング、最適なプランについてお気軽にご相談ください。",
-      button: "business@sayok.chat に連絡",
+      button: "info@kakehashi.tech に連絡",
     },
     footer: {
       tagline: "送る前に、メッセージをもっとよく。",
@@ -790,7 +791,7 @@ const copy = {
     cta: {
       title: "팀의 다국어 커뮤니케이션을 더 명확하게 만드세요.",
       body: "좌석 수, 워크플로, 온보딩, 조직에 맞는 플랜에 대해 상담해 보세요.",
-      button: "business@sayok.chat로 문의",
+      button: "info@kakehashi.tech로 문의",
     },
     footer: {
       tagline: "보내기 전에 메시지를 더 좋게.",
@@ -981,7 +982,7 @@ const copy = {
     cta: {
       title: "让团队的多语言沟通更清晰。",
       body: "联系我们，讨论席位、工作流、onboarding 以及适合贵组织的方案。",
-      button: "发送邮件至 business@sayok.chat",
+      button: "发送邮件至 info@kakehashi.tech",
     },
     footer: {
       tagline: "发送前，让信息更好。",
@@ -1038,12 +1039,8 @@ export default function BusinessPage() {
       <link rel="preconnect" href="https://fonts.googleapis.com" />
       <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
       <link
-        href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800&family=DM+Serif+Display&family=Noto+Sans+JP:wght@400;500;700;800&family=Noto+Sans+KR:wght@400;500;700;800&family=Noto+Sans+SC:wght@400;500;700;800&family=Noto+Serif+JP:wght@600;700&family=Noto+Serif+KR:wght@600;700&family=Noto+Serif+SC:wght@600;700&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;700;800&family=Noto+Sans+JP:wght@400;500;700;800&family=Noto+Sans+KR:wght@400;500;700;800&family=Noto+Sans+SC:wght@400;500;700;800&display=swap"
         rel="stylesheet"
-      />
-      <link
-        rel="stylesheet"
-        href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css"
       />
       <link rel="canonical" href={buildLangHref(lang)} />
       {languages.map((language) => (
@@ -1069,8 +1066,8 @@ export default function BusinessPage() {
                 justifyContent: "center",
                 background: "#185FA5",
                 color: "#ffffff",
-                fontFamily: "'DM Serif Display', Georgia, serif",
-                fontSize: 23,
+                fontSize: 20,
+                fontWeight: 800,
               }}
             >
               S
@@ -1117,14 +1114,14 @@ export default function BusinessPage() {
                 );
               })}
             </div>
-            <a href="mailto:business@sayok.chat" style={{ ...styles.button, minHeight: 42 }}>
+            <a href={`mailto:${contactEmail}`} style={{ ...styles.button, minHeight: 42 }}>
               {t.nav.cta}
             </a>
           </div>
         </div>
       </nav>
 
-      <section style={{ padding: "86px 0 72px", overflow: "hidden" }}>
+      <section style={{ padding: "78px 0 70px", overflow: "hidden" }}>
         <div
           style={{
             ...styles.container,
@@ -1141,12 +1138,10 @@ export default function BusinessPage() {
             </h1>
             <p style={{ ...styles.subheading, maxWidth: 620 }}>{t.hero.body}</p>
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 30 }}>
-              <a href="mailto:business@sayok.chat" style={styles.button}>
-                <i className="ti ti-mail" aria-hidden="true" />
+              <a href={`mailto:${contactEmail}`} style={styles.button}>
                 {t.hero.primary}
               </a>
               <a href="#demo" style={styles.secondaryButton}>
-                <i className="ti ti-player-play" aria-hidden="true" />
                 {t.hero.secondary}
               </a>
             </div>
@@ -1236,7 +1231,7 @@ export default function BusinessPage() {
         </div>
       </section>
 
-      <section style={{ background: "#E6F1FB", padding: "28px 0" }}>
+      <section style={{ background: "#F1F7FC", padding: "26px 0" }}>
         <div style={{ ...styles.container, display: "grid", gap: 18 }}>
           <p style={{ margin: 0, color: "#042C53", fontWeight: 800 }}>{t.logos.label}</p>
           <div
@@ -1279,14 +1274,12 @@ export default function BusinessPage() {
             marginTop: 34,
           }}
         >
-          {t.features.items.map((feature) => (
+          {t.features.items.map((feature, index) => (
             <article key={feature.title} style={{ ...styles.card, padding: 24 }}>
-              <i
-                className={`ti ${feature.icon}`}
-                aria-hidden="true"
-                style={{ color: "#185FA5", fontSize: 34 }}
-              />
-              <h3 style={{ color: "#042C53", fontSize: 20, margin: "18px 0 10px" }}>
+              <div style={{ color: "#185FA5", fontSize: 13, fontWeight: 800, marginBottom: 18 }}>
+                {String(index + 1).padStart(2, "0")}
+              </div>
+              <h3 style={{ color: "#042C53", fontSize: 20, margin: "0 0 10px" }}>
                 {feature.title}
               </h3>
               <p style={{ color: "#55544f", lineHeight: 1.7, margin: 0 }}>{feature.body}</p>
@@ -1295,7 +1288,7 @@ export default function BusinessPage() {
         </div>
       </section>
 
-      <section id="use-cases" style={{ ...styles.section, background: "#f4f9fe" }}>
+      <section id="use-cases" style={{ ...styles.section, background: "#F7FAFD" }}>
         <SectionIntro lang={lang} eyebrow={t.useCases.eyebrow} title={t.useCases.title} />
         <div
           style={{
@@ -1381,12 +1374,14 @@ export default function BusinessPage() {
               <ul style={{ listStyle: "none", padding: 0, margin: "20px 0 24px", display: "grid", gap: 10 }}>
                 {plan.features.map((feature) => (
                   <li key={feature} style={{ display: "flex", gap: 8, color: "#1a1a18" }}>
-                    <i className="ti ti-check" aria-hidden="true" style={{ color: "#185FA5", marginTop: 2 }} />
+                    <span aria-hidden="true" style={{ color: "#185FA5", marginTop: 1 }}>
+                      ✓
+                    </span>
                     {feature}
                   </li>
                 ))}
               </ul>
-              <a href="mailto:business@sayok.chat" style={{ ...styles.button, width: "100%" }}>
+              <a href={`mailto:${contactEmail}`} style={{ ...styles.button, width: "100%" }}>
                 {t.pricing.cta}
               </a>
             </article>
@@ -1429,7 +1424,7 @@ export default function BusinessPage() {
                   }}
                 >
                   {item.q}
-                  <i className={`ti ${isOpen ? "ti-minus" : "ti-plus"}`} aria-hidden="true" />
+                  <span aria-hidden="true">{isOpen ? "−" : "+"}</span>
                 </button>
                 {isOpen ? (
                   <p style={{ color: "#55544f", lineHeight: 1.75, margin: "0 0 22px" }}>{item.a}</p>
@@ -1440,7 +1435,7 @@ export default function BusinessPage() {
         </div>
       </section>
 
-      <section style={{ padding: "78px 0", background: "#042C53", color: "#ffffff" }}>
+      <section style={{ padding: "72px 0", background: "#042C53", color: "#ffffff" }}>
         <div
           style={{
             ...styles.container,
@@ -1455,8 +1450,9 @@ export default function BusinessPage() {
             <h2
               style={{
                 ...typography.heading,
-                fontSize: "clamp(32px, 4vw, 54px)",
+                fontSize: "clamp(28px, 3.4vw, 42px)",
                 margin: "0 0 14px",
+                color: "#ffffff",
               }}
             >
               {t.cta.title}
@@ -1464,10 +1460,9 @@ export default function BusinessPage() {
             <p style={{ color: "rgba(255,255,255,0.78)", lineHeight: 1.75, margin: 0 }}>{t.cta.body}</p>
           </div>
           <a
-            href="mailto:business@sayok.chat"
+            href={`mailto:${contactEmail}`}
             style={{ ...styles.button, background: "#ffffff", color: "#042C53", borderColor: "#ffffff" }}
           >
-            <i className="ti ti-mail" aria-hidden="true" />
             {t.cta.button}
           </a>
         </div>
@@ -1490,8 +1485,8 @@ export default function BusinessPage() {
             <div style={{ marginTop: 6 }}>{t.footer.tagline}</div>
           </div>
           <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-            <a href="mailto:business@sayok.chat" style={{ color: "#185FA5", fontWeight: 800 }}>
-              {t.footer.contact}: business@sayok.chat
+            <a href={`mailto:${contactEmail}`} style={{ color: "#185FA5", fontWeight: 800 }}>
+              {t.footer.contact}: {contactEmail}
             </a>
             <span>
               © {currentYear} SayOK. {t.footer.rights}
@@ -1523,8 +1518,7 @@ function SectionIntro({
         style={{
           ...typography.heading,
           color: "#042C53",
-          fontSize: "clamp(32px, 4vw, 54px)",
-          letterSpacing: 0,
+          fontSize: "clamp(28px, 3.4vw, 42px)",
           margin: "0 0 16px",
         }}
       >
@@ -1566,7 +1560,6 @@ function DemoPanel({
           marginBottom: 8,
         }}
       >
-        <i className={`ti ${isAfter ? "ti-sparkles" : "ti-pencil"}`} aria-hidden="true" />
         {label}
       </div>
       <p style={{ color: isAfter ? "#042C53" : "#55544f", lineHeight: 1.7, margin: 0 }}>{text}</p>
