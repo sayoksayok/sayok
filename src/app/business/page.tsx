@@ -26,6 +26,75 @@ const langAliases: Record<string, Lang> = {
 
 const baseUrl = "https://www.sayok.chat/business";
 
+const typographyByLang: Record<
+  Lang,
+  {
+    body: string;
+    display: string;
+    heading: CSSProperties;
+    price: CSSProperties;
+  }
+> = {
+  en: {
+    body: "'DM Sans', Arial, sans-serif",
+    display: "'DM Serif Display', Georgia, serif",
+    heading: {
+      fontFamily: "'DM Serif Display', Georgia, serif",
+      lineHeight: 0.98,
+      fontWeight: 400,
+    },
+    price: {
+      fontFamily: "'DM Serif Display', Georgia, serif",
+      fontWeight: 400,
+    },
+  },
+  ja: {
+    body: "'Noto Sans JP', 'Hiragino Sans', 'Yu Gothic', 'Meiryo', sans-serif",
+    display: "'Noto Serif JP', 'Hiragino Mincho ProN', 'Yu Mincho', serif",
+    heading: {
+      fontFamily: "'Noto Serif JP', 'Hiragino Mincho ProN', 'Yu Mincho', serif",
+      lineHeight: 1.22,
+      fontWeight: 700,
+      wordBreak: "keep-all",
+      overflowWrap: "break-word",
+    },
+    price: {
+      fontFamily: "'Noto Sans JP', 'Hiragino Sans', 'Yu Gothic', sans-serif",
+      fontWeight: 800,
+    },
+  },
+  ko: {
+    body: "'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif",
+    display: "'Noto Serif KR', 'AppleMyungjo', serif",
+    heading: {
+      fontFamily: "'Noto Serif KR', 'AppleMyungjo', serif",
+      lineHeight: 1.18,
+      fontWeight: 700,
+      wordBreak: "keep-all",
+      overflowWrap: "break-word",
+    },
+    price: {
+      fontFamily: "'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif",
+      fontWeight: 800,
+    },
+  },
+  zh: {
+    body: "'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif",
+    display: "'Noto Serif SC', 'Songti SC', serif",
+    heading: {
+      fontFamily: "'Noto Serif SC', 'Songti SC', serif",
+      lineHeight: 1.18,
+      fontWeight: 700,
+      wordBreak: "keep-all",
+      overflowWrap: "break-word",
+    },
+    price: {
+      fontFamily: "'Noto Sans SC', 'PingFang SC', sans-serif",
+      fontWeight: 800,
+    },
+  },
+};
+
 const styles: Record<string, CSSProperties> = {
   page: {
     minHeight: "100vh",
@@ -95,7 +164,7 @@ const styles: Record<string, CSSProperties> = {
     fontFamily: "'DM Serif Display', Georgia, serif",
     color: "#042C53",
     fontSize: "clamp(36px, 5vw, 68px)",
-    lineHeight: 0.98,
+    lineHeight: 1.04,
     letterSpacing: 0,
     margin: "0 0 22px",
   },
@@ -940,6 +1009,7 @@ export default function BusinessPage() {
   const t = copy[lang];
   const demo = t.demo.content[activeTab];
   const currentYear = useMemo(() => new Date().getFullYear(), []);
+  const typography = typographyByLang[lang];
 
   const setLanguage = (nextLang: Lang) => {
     setLang(nextLang);
@@ -951,11 +1021,11 @@ export default function BusinessPage() {
   };
 
   return (
-    <main style={styles.page}>
+    <main lang={lang} style={{ ...styles.page, fontFamily: typography.body }}>
       <link rel="preconnect" href="https://fonts.googleapis.com" />
       <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
       <link
-        href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800&family=DM+Serif+Display&display=swap"
+        href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800&family=DM+Serif+Display&family=Noto+Sans+JP:wght@400;500;700;800&family=Noto+Sans+KR:wght@400;500;700;800&family=Noto+Sans+SC:wght@400;500;700;800&family=Noto+Serif+JP:wght@600;700&family=Noto+Serif+KR:wght@600;700&family=Noto+Serif+SC:wght@600;700&display=swap"
         rel="stylesheet"
       />
       <link
@@ -1053,7 +1123,7 @@ export default function BusinessPage() {
         >
           <div>
             <p style={styles.eyebrow}>{t.hero.eyebrow}</p>
-            <h1 style={styles.heading}>{t.hero.title}</h1>
+            <h1 style={{ ...styles.heading, ...typography.heading }}>{t.hero.title}</h1>
             <p style={{ ...styles.subheading, maxWidth: 620 }}>{t.hero.body}</p>
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 30 }}>
               <a href="mailto:business@sayok.chat" style={styles.button}>
@@ -1184,7 +1254,7 @@ export default function BusinessPage() {
       </section>
 
       <section id="features" style={styles.section}>
-        <SectionIntro eyebrow={t.features.eyebrow} title={t.features.title} body={t.features.body} />
+        <SectionIntro lang={lang} eyebrow={t.features.eyebrow} title={t.features.title} body={t.features.body} />
         <div
           style={{
             ...styles.container,
@@ -1211,7 +1281,7 @@ export default function BusinessPage() {
       </section>
 
       <section id="use-cases" style={{ ...styles.section, background: "#f4f9fe" }}>
-        <SectionIntro eyebrow={t.useCases.eyebrow} title={t.useCases.title} />
+        <SectionIntro lang={lang} eyebrow={t.useCases.eyebrow} title={t.useCases.title} />
         <div
           style={{
             ...styles.container,
@@ -1232,7 +1302,7 @@ export default function BusinessPage() {
       </section>
 
       <section style={styles.section}>
-        <SectionIntro eyebrow={t.testimonials.eyebrow} title={t.testimonials.title} />
+        <SectionIntro lang={lang} eyebrow={t.testimonials.eyebrow} title={t.testimonials.title} />
         <div
           style={{
             ...styles.container,
@@ -1257,7 +1327,7 @@ export default function BusinessPage() {
       </section>
 
       <section id="pricing" style={{ ...styles.section, background: "#E6F1FB" }}>
-        <SectionIntro eyebrow={t.pricing.eyebrow} title={t.pricing.title} />
+        <SectionIntro lang={lang} eyebrow={t.pricing.eyebrow} title={t.pricing.title} />
         <div
           style={{
             ...styles.container,
@@ -1281,7 +1351,7 @@ export default function BusinessPage() {
                 <strong
                   style={{
                     color: "#185FA5",
-                    fontFamily: "'DM Serif Display', Georgia, serif",
+                    ...typography.price,
                     fontSize: 46,
                     lineHeight: 1,
                   }}
@@ -1310,7 +1380,7 @@ export default function BusinessPage() {
       </section>
 
       <section id="faq" style={styles.section}>
-        <SectionIntro eyebrow={t.faq.eyebrow} title={t.faq.title} />
+        <SectionIntro lang={lang} eyebrow={t.faq.eyebrow} title={t.faq.title} />
         <div style={{ ...styles.container, maxWidth: 860, marginTop: 34 }}>
           {t.faq.items.map((item, index) => {
             const isOpen = openFaq === index;
@@ -1369,9 +1439,8 @@ export default function BusinessPage() {
           <div style={{ maxWidth: 680 }}>
             <h2
               style={{
-                fontFamily: "'DM Serif Display', Georgia, serif",
+                ...typography.heading,
                 fontSize: "clamp(32px, 4vw, 54px)",
-                lineHeight: 1.05,
                 margin: "0 0 14px",
               }}
             >
@@ -1420,23 +1489,26 @@ export default function BusinessPage() {
 }
 
 function SectionIntro({
+  lang,
   eyebrow,
   title,
   body,
 }: {
+  lang: Lang;
   eyebrow: string;
   title: string;
   body?: string;
 }) {
+  const typography = typographyByLang[lang];
+
   return (
     <div style={{ ...styles.container, maxWidth: 800 }}>
       <p style={styles.eyebrow}>{eyebrow}</p>
       <h2
         style={{
-          fontFamily: "'DM Serif Display', Georgia, serif",
+          ...typography.heading,
           color: "#042C53",
           fontSize: "clamp(32px, 4vw, 54px)",
-          lineHeight: 1.06,
           letterSpacing: 0,
           margin: "0 0 16px",
         }}
