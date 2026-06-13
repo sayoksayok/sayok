@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <rect width="1200" height="630" fill="#0F2A6B"/>
+  <rect x="72" y="72" width="46" height="46" rx="12" fill="#1B49C4"/>
+  <text x="136" y="106" fill="#FFFFFF" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="700">SayOK</text>
+  <text x="234" y="106" fill="#9DB6FF" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="700">Leads</text>
+  <text x="72" y="270" fill="#FFFFFF" font-family="Arial, Helvetica, sans-serif" font-size="64" font-weight="800">Paste a URL. Get real</text>
+  <text x="72" y="344" fill="#FFFFFF" font-family="Arial, Helvetica, sans-serif" font-size="64" font-weight="800">people to contact.</text>
+  <text x="72" y="416" fill="#C9DBFF" font-family="Arial, Helvetica, sans-serif" font-size="28">Outreach already written. Public sources only.</text>
+  <rect x="72" y="516" width="220" height="44" rx="22" fill="#15994E"/>
+  <text x="92" y="545" fill="#FFFFFF" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="600">sayok.chat/new-deal</text>
+  <text x="316" y="545" fill="#7E97D6" font-family="Arial, Helvetica, sans-serif" font-size="22">A Kakehashi product - your bridge to Japan</text>
+</svg>

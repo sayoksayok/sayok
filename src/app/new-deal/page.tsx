@@ -11,7 +11,7 @@ export const metadata: Metadata = {
     description: 'Reads your site, searches public sources, verifies emails, drafts outreach.',
     url: 'https://sayok.chat/new-deal',
     type: 'website',
-    images: [{ url: 'https://sayok.chat/new-deal/opengraph-image', width: 1200, height: 630 }],
+    images: [{ url: 'https://sayok.chat/new-deal-og.png', width: 1200, height: 630 }],
   },
   twitter: { card: 'summary_large_image' },
 }
