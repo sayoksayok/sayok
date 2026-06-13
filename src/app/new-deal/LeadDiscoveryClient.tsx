@@ -16,6 +16,21 @@ const emptySenderProfile = {
   template: '',
 }
 
+const exampleMessage = `Hi,
+
+I found your Japanese language program and thought this might be useful for students who want more speaking practice outside class.
+
+We provide live online Japanese lessons with native teachers, and we can support both 1-on-1 lessons and small group sessions for university programs.
+
+We also run PuniPuniJapan, a Japanese learning community used by learners worldwide, so we have experience creating approachable Japanese study content and helping learners stay motivated.
+
+For students who want to go further, we can also introduce short-term study options in Japan.
+
+Would you be open to a quick conversation about whether this could support your students this semester?
+
+Best,
+Yudai`
+
 type SavedLeadRun = {
   id: string
   createdAt: string
@@ -280,6 +295,7 @@ export default function LeadDiscoveryClient() {
     setSetupError(null)
   }
 
+  const hasInput = Boolean(form.websiteUrl.trim() || form.targetMarket.trim() || form.goal.trim())
   const canViewResults = Boolean(user || gateUnlocked)
   const verifiedEmailCount = result?.contacts.filter((contact) => contact.email && contact.emailStatus === 'verified').length || 0
 
@@ -289,7 +305,7 @@ export default function LeadDiscoveryClient() {
         <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4">
           <a href="/" className="text-xl font-black text-orange-500">SayOK</a>
           <div className="flex items-center gap-3">
-            <span className="hidden rounded-full bg-orange-50 px-3 py-1 text-xs font-bold uppercase tracking-[0.16em] text-orange-700 sm:inline-flex">Real lead workflow</span>
+            <span className="hidden rounded-full bg-orange-50 px-3 py-1 text-xs font-bold uppercase tracking-[0.16em] text-orange-700 sm:inline-flex">Real outreach workflow</span>
             {user ? (
               <div className="flex items-center gap-2">
                 <span className="max-w-[160px] truncate text-sm font-semibold text-gray-600">{user.email}</span>
@@ -306,8 +322,8 @@ export default function LeadDiscoveryClient() {
         <div className="lg:sticky lg:top-6 lg:self-start">
           <div className="rounded-2xl border border-orange-100 bg-orange-50/40 p-6">
             <p className="mb-3 text-xs font-bold uppercase tracking-[0.16em] text-orange-700">No fake leads</p>
-            <h1 className="mb-3 text-4xl font-black leading-tight text-gray-950">Find real people to contact.</h1>
-            <p className="text-base leading-7 text-gray-600">Paste a website and goal. SayOK searches the web, finds public organizations and emails, then drafts outreach only when real contacts are found.</p>
+            <h1 className="mb-3 text-4xl font-black leading-tight text-gray-950">営業先と送るメールを一緒に見つける。</h1>
+            <p className="text-base leading-7 text-gray-600">Webサイトと目的を入れるだけ。SayOKが公開情報から候補を探し、出典を確認し、送れる営業文まで作ります。</p>
           </div>
 
           <form
@@ -321,7 +337,7 @@ export default function LeadDiscoveryClient() {
             <input
               value={form.websiteUrl}
               onChange={(event) => setForm({ ...form, websiteUrl: event.target.value })}
-              placeholder="https://company.com"
+              placeholder="https://your-company.com"
               className="mt-2 w-full rounded-xl border border-gray-200 px-4 py-3 text-base outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
             />
 
@@ -329,7 +345,7 @@ export default function LeadDiscoveryClient() {
             <input
               value={form.targetMarket}
               onChange={(event) => setForm({ ...form, targetMarket: event.target.value })}
-              placeholder="Japan, Southeast Asia, Tokyo..."
+              placeholder="United States, Japan, Southeast Asia..."
               className="mt-2 w-full rounded-xl border border-gray-200 px-4 py-3 text-base outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
             />
 
@@ -337,7 +353,7 @@ export default function LeadDiscoveryClient() {
             <textarea
               value={form.goal}
               onChange={(event) => setForm({ ...form, goal: event.target.value })}
-              placeholder="Find distributors, book meetings with AI startups, get 50 customers..."
+              placeholder="Find students, distributors, partners, sponsors, or customers..."
               className="mt-2 h-28 w-full resize-none rounded-xl border border-gray-200 px-4 py-3 text-base outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
             />
 
@@ -345,7 +361,7 @@ export default function LeadDiscoveryClient() {
               disabled={isLoading}
               className="mt-5 w-full rounded-xl bg-orange-500 px-5 py-4 text-base font-black text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-orange-300"
             >
-              {isLoading ? 'Finding real leads...' : 'Find leads and emails'}
+              {isLoading ? 'Finding real leads...' : 'Find leads and write outreach'}
             </button>
           </form>
 
@@ -379,8 +395,8 @@ export default function LeadDiscoveryClient() {
           ) : (
             <section className="mt-5 rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-5">
               <p className="text-xs font-black uppercase tracking-[0.14em] text-gray-500">Sending profile</p>
-              <h2 className="mt-1 text-lg font-black text-gray-950">Log in to customize outreach</h2>
-              <p className="mt-2 text-sm leading-6 text-gray-600">Guest searches use a generic outreach style. Your company templates and history appear after login.</p>
+              <h2 className="mt-1 text-lg font-black text-gray-950">Log in to use your own style</h2>
+              <p className="mt-2 text-sm leading-6 text-gray-600">ログイン後は会社ごとの営業テンプレートと過去の検索履歴を保存できます。</p>
               <button type="button" onClick={handleLogin} className="mt-4 rounded-xl bg-gray-950 px-4 py-3 text-sm font-black text-white hover:bg-gray-800">Log in</button>
             </section>
           )}
@@ -421,12 +437,7 @@ export default function LeadDiscoveryClient() {
 
           {error && <div className="rounded-2xl border border-red-200 bg-red-50 p-5 font-semibold text-red-700">{error}</div>}
 
-          {!result && !setupError && !error && !isLoading && (
-            <div className="rounded-2xl border border-dashed border-gray-300 bg-gray-50 p-8 text-center">
-              <h2 className="text-2xl font-black text-gray-900">Lead pipeline will appear here</h2>
-              <p className="mt-2 text-gray-600">No demo contacts. No fake emails. Results show only after SayOK finishes a real search.</p>
-            </div>
-          )}
+          {!result && !setupError && !error && !isLoading && <EmptyResultsPreview hasInput={hasInput} />}
 
           {result && (
             <div className="relative space-y-5">
@@ -493,6 +504,102 @@ function PipelineStatus({ isLoading, result }: { isLoading: boolean; result: Lea
         </div>
         )
       })}
+    </div>
+  )
+}
+
+function EmptyResultsPreview({ hasInput }: { hasInput: boolean }) {
+  return (
+    <div className="space-y-5">
+      <section className="overflow-hidden rounded-2xl border border-orange-100 bg-white shadow-sm">
+        <div className="border-b border-orange-100 bg-orange-50/60 px-5 py-4">
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-orange-700">Sample output</p>
+          <h2 className="mt-1 text-2xl font-black leading-tight text-gray-950">
+            検索後は、営業先と送る文章がここに出ます。
+          </h2>
+          <p className="mt-2 text-sm leading-6 text-gray-600">
+            下はサンプルです。実行後は公開ページから見つかった実在の組織、出典リンク、メールだけを表示します。
+          </p>
+        </div>
+
+        <div className="grid gap-0 lg:grid-cols-[0.9fr_1.1fr]">
+          <div className="border-b border-gray-100 p-5 lg:border-b-0 lg:border-r">
+            <div className="flex flex-wrap gap-2">
+              <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-black uppercase text-gray-600">sample</span>
+              <span className="rounded-full bg-orange-50 px-2.5 py-1 text-xs font-black text-orange-700">source required</span>
+            </div>
+            <h3 className="mt-3 text-2xl font-black leading-tight text-gray-950">University Japanese Program</h3>
+            <p className="mt-2 text-sm leading-6 text-gray-600">
+              日本語を学ぶ学生に追加の会話練習、少人数グループレッスン、短期日本留学の導線を提案できる候補。
+            </p>
+            <div className="mt-4 rounded-xl bg-gray-50 p-4">
+              <p className="text-xs font-black uppercase tracking-[0.12em] text-gray-500">What SayOK will verify</p>
+              <ul className="mt-3 space-y-2 text-sm font-semibold text-gray-700">
+                <li>Public source page</li>
+                <li>Best contact title or department</li>
+                <li>Email status and source URL</li>
+              </ul>
+            </div>
+          </div>
+
+          <div className="bg-orange-50/25 p-5">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.12em] text-orange-700">Send this email</p>
+                <h3 className="mt-1 text-xl font-black leading-tight text-gray-950">
+                  Native speaker practice for your Japanese students
+                </h3>
+              </div>
+              <span className="rounded-xl bg-white px-3 py-2 text-xs font-black text-gray-500">sample draft</span>
+            </div>
+            <p className="mt-4 whitespace-pre-wrap rounded-xl bg-white p-4 text-sm leading-6 text-gray-700">
+              {exampleMessage}
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section className="grid gap-4 md:grid-cols-3">
+        {[
+          ['1', 'Paste your website', 'SayOK reads what you sell and what makes it credible.'],
+          ['2', 'Find real sources', 'It searches public pages for organizations and reachable contacts.'],
+          ['3', 'Send a better email', 'It drafts outreach that fits the lead, your offer, and your goal.'],
+        ].map(([number, title, copy]) => (
+          <div key={number} className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-orange-500 text-sm font-black text-white">{number}</div>
+            <h3 className="mt-4 text-lg font-black text-gray-950">{title}</h3>
+            <p className="mt-2 text-sm leading-6 text-gray-600">{copy}</p>
+          </div>
+        ))}
+      </section>
+
+      <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.14em] text-orange-700">
+              {hasInput ? 'Ready when you are' : 'Start with one real search'}
+            </p>
+            <h2 className="mt-1 text-xl font-black text-gray-950">
+              空のリストではなく、あなたの会社向けの候補を出します。
+            </h2>
+          </div>
+          <div className="rounded-xl bg-gray-50 px-4 py-3 text-sm font-bold text-gray-600">
+            No fake leads. No fake emails.
+          </div>
+        </div>
+      </section>
+
+      <section className="grid gap-4 md:grid-cols-2">
+        {[
+          ['これはスクレイピングで勝手に送信しますか?', 'いいえ。今は公開情報を探し、文面を作り、Gmailで開けるところまでです。送信前に必ず確認できます。'],
+          ['メールが見つからない場合は?', '無理に偽メールを作りません。出典付きの問い合わせ先、フォーム、LinkedIn向け文面に切り替えます。'],
+        ].map(([question, answer]) => (
+          <div key={question} className="rounded-2xl border border-gray-200 bg-white p-5">
+            <h3 className="font-black text-gray-950">{question}</h3>
+            <p className="mt-2 text-sm leading-6 text-gray-600">{answer}</p>
+          </div>
+        ))}
+      </section>
     </div>
   )
 }
