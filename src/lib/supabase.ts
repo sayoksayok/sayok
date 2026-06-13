@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const publicSiteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://sayok.chat';
 
 // Only create client if credentials are provided
 export const supabase = supabaseUrl && supabaseAnonKey
@@ -19,6 +20,33 @@ export async function checkAuthHealth(): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+function isLocalhost(hostname: string): boolean {
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '0.0.0.0';
+}
+
+/** Prefer the configured public site URL for OAuth so apex/www mismatches do not break sign-in. */
+export function getPublicSiteUrl(): string {
+  if (typeof window === 'undefined') return publicSiteUrl;
+
+  const currentUrl = new URL(window.location.origin);
+  if (isLocalhost(currentUrl.hostname)) return currentUrl.origin;
+
+  try {
+    const configuredUrl = new URL(publicSiteUrl);
+    return configuredUrl.origin;
+  } catch {
+    return currentUrl.origin;
+  }
+}
+
+export function getAuthCallbackUrl(nextPath?: string): string {
+  const url = new URL('/auth/callback', getPublicSiteUrl());
+  if (nextPath && nextPath.startsWith('/')) {
+    url.searchParams.set('next', nextPath);
+  }
+  return url.toString();
 }
 
 // Database types for future use (translation history, user preferences, etc.)
