@@ -111,6 +111,54 @@ vercel
 vercel env add ANTHROPIC_API_KEY
 ```
 
+## Lead Discovery Workflow
+
+The `/new-deal` page is a real lead discovery and outreach workflow. A user enters a website URL, target market, and business goal. SayOK uses configured APIs to search for public organizations and contacts, then drafts outreach only when usable contact data is found.
+
+Required production environment variables:
+
+- `BRAVE_SEARCH_API_KEY`: finds public organizations and source pages.
+- `FIRECRAWL_API_KEY`: reads and summarizes the user's website.
+- `HUNTER_API_KEY`: finds and verifies public email addresses.
+- `ANTHROPIC_API_KEY`: analyzes the offer, ranks leads, segments intent, and writes outreach.
+- `SUPABASE_SERVICE_ROLE_KEY`: stores server-side intent data and email-gate captures.
+
+Optional:
+
+- `APOLLO_API_KEY`: reserved for contact enrichment when the Apollo plan supports API prospecting.
+
+## Lead Intent Data Foundation
+
+Apply `supabase/migrations/20260612170000_lead_intent_foundation.sql` in Supabase before relying on `/new-deal` data capture.
+
+Core tables:
+
+- `users`: captured Google or email-gate identities, company domain, auth provider, and optional marketing consent.
+- `lead_runs`: one row per valid lead-search submission, including raw URL, target market, business goal, referrer, locale, coarse IP country, and run status.
+- `run_results`: organizations and contacts found for each run, including role, source URL, and masked email only.
+- `run_segments`: LLM-derived structured tags for each run. `japan_market_intent` is an indexed top-level boolean for future marketplace segmentation.
+
+Query runs showing Japan-market intent:
+
+```sql
+SELECT
+  lr.id,
+  lr.created_at,
+  lr.input_url,
+  lr.target_market,
+  lr.business_goal,
+  u.email,
+  u.company_domain,
+  rs.target_region,
+  rs.goal_type,
+  rs.confidence
+FROM public.lead_runs lr
+JOIN public.run_segments rs ON rs.run_id = lr.id
+LEFT JOIN public.users u ON u.id = lr.user_id
+WHERE rs.japan_market_intent = true
+ORDER BY lr.created_at DESC;
+```
+
 ## Project Structure
 
 ```
