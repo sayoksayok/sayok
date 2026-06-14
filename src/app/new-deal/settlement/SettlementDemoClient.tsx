@@ -62,6 +62,8 @@ function SettlementPanel() {
   const [proposalError, setProposalError] = useState('')
   const [isLoadingProposal, setIsLoadingProposal] = useState(true)
   const [confirmedHash, setConfirmedHash] = useState<`0x${string}` | undefined>()
+  const [approvalHash, setApprovalHash] = useState<`0x${string}` | undefined>()
+  const [isTokenApproved, setIsTokenApproved] = useState(false)
 
   const missingConfig = !escrowContractAddress || !escrowTokenAddress
   const isWrongChain = isConnected && chainId !== mantleSepolia.id
@@ -115,7 +117,7 @@ function SettlementPanel() {
     })
   }
 
-  async function deposit() {
+  async function approveToken() {
     if (!escrowContractAddress || !escrowTokenAddress) return
     setActionError('')
     try {
@@ -126,8 +128,19 @@ function SettlementPanel() {
         args: [escrowContractAddress, amountUnits],
         chainId: mantleSepolia.id,
       })
-      console.log('Escrow token approval tx:', approveHash)
       await publicClient?.waitForTransactionReceipt({ hash: approveHash })
+      setApprovalHash(approveHash)
+      setConfirmedHash(approveHash)
+      setIsTokenApproved(true)
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Token approval failed.')
+    }
+  }
+
+  async function deposit() {
+    if (!escrowContractAddress) return
+    setActionError('')
+    try {
       const depositHash = await writeContractAsync({
         address: escrowContractAddress,
         abi: outcomeReferralEscrowAbi,
@@ -277,11 +290,18 @@ function SettlementPanel() {
 
           <div className="mt-5 flex flex-wrap gap-3">
             <button
-              onClick={deposit}
-              disabled={!isConnected || isWrongChain || missingConfig || isWriting || status !== 'proposed'}
+              onClick={approveToken}
+              disabled={!isConnected || isWrongChain || missingConfig || isWriting || isTokenApproved || status !== 'proposed'}
               className="rounded-xl bg-orange-500 px-5 py-3 text-sm font-black text-white hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-orange-300"
             >
-              Approve in wallet: deposit
+              {isTokenApproved ? '1. Token approved' : '1. Approve token'}
+            </button>
+            <button
+              onClick={deposit}
+              disabled={!isConnected || isWrongChain || missingConfig || isWriting || !isTokenApproved || status !== 'proposed'}
+              className="rounded-xl bg-gray-950 px-5 py-3 text-sm font-black text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-300"
+            >
+              2. Deposit escrow
             </button>
             <button
               onClick={release}
@@ -299,6 +319,15 @@ function SettlementPanel() {
             </button>
           </div>
 
+          <p className="mt-3 text-xs font-semibold leading-5 text-gray-500">
+            Deposit requires two explicit wallet approvals: first let the escrow contract spend the testnet ERC20,
+            then deposit those tokens into escrow. The agent never moves funds without your wallet click.
+          </p>
+          {approvalHash && (
+            <p className="mt-4 break-all rounded-xl bg-orange-50 p-4 text-sm font-bold text-orange-800">
+              Token approval tx: <a href={`${mantleExplorerUrl}/tx/${approvalHash}`} target="_blank" rel="noreferrer" className="underline">{approvalHash}</a>
+            </p>
+          )}
           {(isWriting || isConfirming) && <p className="mt-4 text-sm font-bold text-orange-700">Waiting for wallet or Mantle Sepolia confirmation...</p>}
           {isConfirmed && txUrl && (
             <p className="mt-4 break-all rounded-xl bg-green-50 p-4 text-sm font-bold text-green-800">
