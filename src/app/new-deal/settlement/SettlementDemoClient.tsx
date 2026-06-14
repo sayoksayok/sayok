@@ -1,7 +1,7 @@
 'use client'
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { createConfig, http, WagmiProvider, useAccount, useConnect, useDisconnect, usePublicClient, useSwitchChain, useWaitForTransactionReceipt, useWriteContract } from 'wagmi'
 import { injected } from 'wagmi/connectors'
 import { formatUnits, parseUnits } from 'viem'
@@ -57,11 +57,63 @@ function SettlementPanel() {
   })
   const [status, setStatus] = useState<'proposed' | 'deposited' | 'released' | 'refunded'>('proposed')
   const [actionError, setActionError] = useState('')
+  const [auditId, setAuditId] = useState('')
+  const [agentReasoning, setAgentReasoning] = useState('')
+  const [proposalError, setProposalError] = useState('')
+  const [isLoadingProposal, setIsLoadingProposal] = useState(true)
+  const [confirmedHash, setConfirmedHash] = useState<`0x${string}` | undefined>()
 
   const missingConfig = !escrowContractAddress || !escrowTokenAddress
   const isWrongChain = isConnected && chainId !== mantleSepolia.id
   const amountUnits = parseUnits(referral.amount, escrowTokenDecimals)
-  const txUrl = lastHash ? `${mantleExplorerUrl}/tx/${lastHash}` : ''
+  const txHash = confirmedHash || lastHash
+  const txUrl = txHash ? `${mantleExplorerUrl}/tx/${txHash}` : ''
+
+  useEffect(() => {
+    let isActive = true
+
+    async function createProposal() {
+      setIsLoadingProposal(true)
+      setProposalError('')
+      try {
+        const response = await fetch('/api/escrow-settlement/proposal', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            referralId: referral.id,
+            payee: referral.payee,
+            proposedAmount: referral.amount,
+            condition: referral.condition,
+            context: referral.context,
+          }),
+        })
+        const data = await response.json()
+        if (!response.ok) throw new Error(data?.error || 'Could not create settlement proposal.')
+        if (!isActive) return
+        setAuditId(data.auditId || '')
+        setAgentReasoning(data.agentReasoning || '')
+      } catch (error) {
+        if (!isActive) return
+        setProposalError(error instanceof Error ? error.message : 'Could not create settlement proposal.')
+      } finally {
+        if (isActive) setIsLoadingProposal(false)
+      }
+    }
+
+    void createProposal()
+    return () => {
+      isActive = false
+    }
+  }, [])
+
+  async function updateAudit(nextStatus: 'deposited' | 'released' | 'refunded', hash: `0x${string}`) {
+    if (!auditId) return
+    await fetch('/api/escrow-settlement/proposal', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ auditId, status: nextStatus, txHash: hash }),
+    })
+  }
 
   async function deposit() {
     if (!escrowContractAddress || !escrowTokenAddress) return
@@ -76,14 +128,17 @@ function SettlementPanel() {
       })
       console.log('Escrow token approval tx:', approveHash)
       await publicClient?.waitForTransactionReceipt({ hash: approveHash })
-      await writeContractAsync({
+      const depositHash = await writeContractAsync({
         address: escrowContractAddress,
         abi: outcomeReferralEscrowAbi,
         functionName: 'deposit',
         args: [referral.id, referral.payee as `0x${string}`, amountUnits],
         chainId: mantleSepolia.id,
       })
+      await publicClient?.waitForTransactionReceipt({ hash: depositHash })
+      setConfirmedHash(depositHash)
       setStatus('deposited')
+      await updateAudit('deposited', depositHash)
     } catch (error) {
       setActionError(error instanceof Error ? error.message : 'Deposit failed.')
     }
@@ -93,14 +148,17 @@ function SettlementPanel() {
     if (!escrowContractAddress) return
     setActionError('')
     try {
-      await writeContractAsync({
+      const releaseHash = await writeContractAsync({
         address: escrowContractAddress,
         abi: outcomeReferralEscrowAbi,
         functionName: 'release',
         args: [referral.id],
         chainId: mantleSepolia.id,
       })
+      await publicClient?.waitForTransactionReceipt({ hash: releaseHash })
+      setConfirmedHash(releaseHash)
       setStatus('released')
+      await updateAudit('released', releaseHash)
     } catch (error) {
       setActionError(error instanceof Error ? error.message : 'Release failed.')
     }
@@ -110,14 +168,17 @@ function SettlementPanel() {
     if (!escrowContractAddress) return
     setActionError('')
     try {
-      await writeContractAsync({
+      const refundHash = await writeContractAsync({
         address: escrowContractAddress,
         abi: outcomeReferralEscrowAbi,
         functionName: 'refund',
         args: [referral.id],
         chainId: mantleSepolia.id,
       })
+      await publicClient?.waitForTransactionReceipt({ hash: refundHash })
+      setConfirmedHash(refundHash)
       setStatus('refunded')
+      await updateAudit('refunded', refundHash)
     } catch (error) {
       setActionError(error instanceof Error ? error.message : 'Refund failed.')
     }
@@ -160,7 +221,19 @@ function SettlementPanel() {
               Pay {referral.amount} testnet tokens to the matched referrer because the condition is marked as:
               <span className="font-black"> {referral.condition}</span>.
             </p>
-            <p className="mt-3 rounded-xl bg-white p-4 text-sm leading-6 text-gray-700">{referral.context}</p>
+            <div className="mt-3 rounded-xl bg-white p-4 text-sm leading-6 text-gray-700">
+              {isLoadingProposal ? (
+                <p className="font-bold text-orange-700">Agent is generating settlement reasoning...</p>
+              ) : proposalError ? (
+                <p className="font-bold text-red-700">{proposalError}</p>
+              ) : (
+                <>
+                  <p className="text-xs font-black uppercase tracking-[0.12em] text-gray-500">Agent reasoning</p>
+                  <p className="mt-2">{agentReasoning}</p>
+                  {auditId && <p className="mt-3 break-all text-xs font-bold text-gray-500">Audit record: {auditId}</p>}
+                </>
+              )}
+            </div>
           </section>
         </div>
 
@@ -229,7 +302,8 @@ function SettlementPanel() {
           {(isWriting || isConfirming) && <p className="mt-4 text-sm font-bold text-orange-700">Waiting for wallet or Mantle Sepolia confirmation...</p>}
           {isConfirmed && txUrl && (
             <p className="mt-4 break-all rounded-xl bg-green-50 p-4 text-sm font-bold text-green-800">
-              Confirmed tx: <a href={txUrl} target="_blank" rel="noreferrer" className="underline">{lastHash}</a>
+              Confirmed tx: <a href={txUrl} target="_blank" rel="noreferrer" className="underline">{txHash}</a>
+              {agentReasoning && <span className="mt-2 block text-green-900">Agent reasoning: {agentReasoning}</span>}
             </p>
           )}
           {actionError && <p className="mt-4 rounded-xl bg-red-50 p-4 text-sm font-bold text-red-700">{actionError}</p>}
