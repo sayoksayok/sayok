@@ -159,6 +159,46 @@ WHERE rs.japan_market_intent = true
 ORDER BY lr.created_at DESC;
 ```
 
+## Mantle Sepolia Escrow Demo
+
+The `/new-deal/settlement` route is a testnet-only outcome escrow demo for matched referrals. It is disabled unless `NEXT_PUBLIC_ESCROW_DEMO=true`.
+
+Safety boundaries:
+
+- The contract is for Mantle Sepolia only.
+- Use testnet USDC or a mock ERC20 only.
+- Production SayOK is not wired to this contract.
+- Users must approve every transaction in MetaMask.
+- Mainnet use requires a third-party security audit first.
+
+Deploy the demo contract:
+
+```bash
+MANTLE_SEPOLIA_RPC_URL=https://rpc.sepolia.mantle.xyz \
+ESCROW_ERC20_ADDRESS=0x_your_testnet_usdc_or_mock_erc20 \
+DEPLOYER_PRIVATE_KEY=0x_your_testnet_deployer_key \
+npm run deploy:escrow:mantle-sepolia
+```
+
+The script refuses to deploy unless the connected chain id is `5003`. It writes the deployed address to:
+
+```text
+contracts/deployments/mantle-sepolia.json
+```
+
+Run the local demo:
+
+```bash
+NEXT_PUBLIC_ESCROW_DEMO=true \
+NEXT_PUBLIC_ESCROW_CONTRACT_ADDRESS=0x_deployed_escrow \
+NEXT_PUBLIC_ESCROW_TOKEN_ADDRESS=0x_testnet_usdc_or_mock_erc20 \
+NEXT_PUBLIC_ESCROW_TOKEN_DECIMALS=6 \
+NEXT_PUBLIC_MANTLE_SEPOLIA_RPC_URL=https://rpc.sepolia.mantle.xyz \
+npm run dev
+```
+
+Apply `supabase/migrations/20260614120000_escrow_settlement_audit.sql` before testing audit persistence. The `escrow_settlement_audits` table stores `referral_id`, `agent_reasoning`, `proposed_amount`, `payee`, `tx_hash`, `status`, and timestamps so the agent decision and on-chain proof stay linked.
+
 ## Project Structure
 
 ```
