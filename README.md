@@ -171,12 +171,30 @@ Safety boundaries:
 - Users must approve every transaction in MetaMask.
 - Mainnet use requires a third-party security audit first.
 
-Deploy the demo contract:
+For the easiest demo, first deploy a mock ERC20 on Mantle Sepolia:
+
+```bash
+MANTLE_SEPOLIA_RPC_URL=https://rpc.sepolia.mantle.xyz \
+DEPLOYER_PRIVATE_KEY=0x_your_throwaway_testnet_deployer_key \
+MOCK_TOKEN_INITIAL_SUPPLY=10000 \
+MOCK_TOKEN_RECIPIENT=0x_wallet_that_will_deposit \
+npm run deploy:mock-token:mantle-sepolia
+```
+
+The script writes the token address to:
+
+```text
+contracts/deployments/mantle-sepolia-mock-token.json
+```
+
+Use that address as `ESCROW_ERC20_ADDRESS` and `NEXT_PUBLIC_ESCROW_TOKEN_ADDRESS`.
+
+Deploy the demo escrow contract:
 
 ```bash
 MANTLE_SEPOLIA_RPC_URL=https://rpc.sepolia.mantle.xyz \
 ESCROW_ERC20_ADDRESS=0x_your_testnet_usdc_or_mock_erc20 \
-DEPLOYER_PRIVATE_KEY=0x_your_testnet_deployer_key \
+DEPLOYER_PRIVATE_KEY=0x_your_throwaway_testnet_deployer_key \
 npm run deploy:escrow:mantle-sepolia
 ```
 
