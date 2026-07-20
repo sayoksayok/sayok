@@ -7,12 +7,14 @@ export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: "SayOK — From first contact to OK",
   description:
-    "A relationship and deal execution OS for founders, consultants, agencies, and business developers.",
+    "An execution OS that turns workspace context, company data, agents, and approvals into the next action that earns an OK.",
   keywords: [
     "relationship management",
     "founder sales",
     "business development",
     "deal execution",
+    "agents",
+    "approvals",
     "follow-up",
     "partnerships",
   ],
@@ -24,7 +26,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "SayOK — From first contact to OK",
     description:
-      "Remember relationships, track opportunities, and prepare the next action that moves a conversation forward.",
+      "Workspace context, company memory, agents, and approvals for moving real business relationships forward.",
     type: "website",
     images: ["/character.jpg"],
   },

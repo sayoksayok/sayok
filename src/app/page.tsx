@@ -1,5 +1,5 @@
-import RelationshipOS from '@/components/RelationshipOS';
+import SayOKExecutionOS from '@/components/SayOKExecutionOS';
 
 export default function Home() {
-  return <RelationshipOS />;
+  return <SayOKExecutionOS />;
 }

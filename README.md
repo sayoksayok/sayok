@@ -2,7 +2,7 @@
 
 From first contact to OK.
 
-SayOK is a relationship and deal execution OS for founders, consultants, agencies, and business developers. It helps a user move real business relationships from first contact to conversation, meeting, proposal, follow-up, agreement, and OK.
+SayOK is an execution OS for founders, consultants, agencies, and business developers. It turns workspace context, company data, agents, and approvals into concrete next actions that move real business relationships from first contact to conversation, meeting, proposal, follow-up, agreement, and OK.
 
 This rebuild intentionally moves SayOK away from being a generic AI message rewriter or company-analysis page. The core product loop is now:
 
@@ -30,6 +30,34 @@ Implemented screens:
 - `Action workspace`: draft a follow-up, mark actions done, schedule next follow-up, or pause weak opportunities.
 
 The MVP uses localStorage for a reliable manual workflow and realistic demo data. Supabase tables are included for persistence when auth-backed storage is wired in.
+
+## Product Architecture
+
+SayOK is organized around this hierarchy:
+
+```text
+User
+↓
+Workspace / Organization
+↓
+Integrations
+↓
+Company data
+↓
+Agents
+↓
+Tasks / Actions / Approvals
+```
+
+This is deliberate. The product should not ask the user to re-explain their business every time. A workspace holds the operating context, company data holds the reusable commercial memory, agents prepare work from that context, and approvals keep the human in control before anything external happens.
+
+New MVP surfaces:
+
+- `Workspace`: the operating context for a specific business, brand, or organization.
+- `Integrations`: external inputs such as Gmail, Calendar, CSV, and manual capture.
+- `Company data`: positioning, offers, proof points, websites, and default signature.
+- `Agents`: narrow execution roles with explicit data sources and guardrails.
+- `Tasks / Approvals`: the daily execution queue where prepared actions are approved, completed, snoozed, or paused.
 
 ## Tech Stack
 
@@ -93,6 +121,12 @@ New relationship OS migration:
 supabase/migrations/20260718090000_relationship_os.sql
 ```
 
+New execution hierarchy migration:
+
+```text
+supabase/migrations/20260720093000_execution_os_hierarchy.sql
+```
+
 New tables:
 
 - `relationship_companies`
@@ -101,6 +135,11 @@ New tables:
 - `relationship_interactions`
 - `relationship_next_actions`
 - `relationship_drafts`
+- `sayok_workspaces`
+- `sayok_integrations`
+- `sayok_company_profiles`
+- `sayok_agents`
+- `sayok_execution_tasks`
 
 Each table is scoped by `user_id` and protected by row-level security. Useful query examples:
 
