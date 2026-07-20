@@ -121,13 +121,78 @@ New relationship OS migration:
 supabase/migrations/20260718090000_relationship_os.sql
 ```
 
-New execution hierarchy migration:
+Legacy execution hierarchy migration:
 
 ```text
 supabase/migrations/20260720093000_execution_os_hierarchy.sql
 ```
 
-New tables:
+Current private Work OS foundation migration:
+
+```text
+supabase/migrations/20260720161000_work_os_foundation.sql
+```
+
+Run this migration in Supabase before using the new app. The normal app no longer renders demo work on public routes; users must sign in and create a private workspace.
+
+Current Work OS tables:
+
+- `work_os_workspaces`
+- `work_os_members`
+- `work_os_projects`
+- `work_os_tasks`
+- `work_os_activity_events`
+- `work_os_prepared_work`
+
+Core state query:
+
+```sql
+-- Founder actions that are active now
+select *
+from work_os_tasks
+where workspace_id = :workspace_id
+  and status in (
+    'inbox',
+    'needs_clarification',
+    'ready',
+    'in_progress',
+    'prepared_by_sayok',
+    'needs_user_approval',
+    'scheduled',
+    'blocked'
+  )
+  and (due_at is null or due_at <= now() + interval '1 day')
+order by
+  case priority
+    when 'urgent' then 0
+    when 'high' then 1
+    when 'medium' then 2
+    else 3
+  end,
+  due_at nulls last;
+```
+
+Waiting query:
+
+```sql
+-- Waiting items should not appear as founder actions until follow-up date
+select *
+from work_os_tasks
+where workspace_id = :workspace_id
+  and status = 'waiting_on_someone'
+order by follow_up_at nulls last;
+```
+
+Audit trail query:
+
+```sql
+select *
+from work_os_activity_events
+where workspace_id = :workspace_id
+order by created_at desc;
+```
+
+Legacy relationship/execution tables:
 
 - `relationship_companies`
 - `relationship_people`
@@ -141,7 +206,7 @@ New tables:
 - `sayok_agents`
 - `sayok_execution_tasks`
 
-Each table is scoped by `user_id` and protected by row-level security. Useful query examples:
+The legacy tables are kept for compatibility, but the current product experience uses the `work_os_*` tables. Work OS data is workspace-scoped through `work_os_members` and protected by row-level security. No business-data query should run without a workspace scope.
 
 ```sql
 -- Today's open execution list
