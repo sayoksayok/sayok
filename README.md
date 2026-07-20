@@ -1,244 +1,160 @@
-# say ok? - Native Expression Checker
+# SayOK
 
-Not translation—real expressions natives actually use.
+From first contact to OK.
 
-## Overview
+SayOK is a relationship and deal execution OS for founders, consultants, agencies, and business developers. It helps a user move real business relationships from first contact to conversation, meeting, proposal, follow-up, agreement, and OK.
 
-"say ok?" is a language learning tool that helps users choose natural, native-sounding expressions based on context. Instead of just translating, it acts like a bilingual native friend who shows you how natives actually say things.
+This rebuild intentionally moves SayOK away from being a generic AI message rewriter or company-analysis page. The core product loop is now:
 
-### Features
+1. Capture a person, company, conversation, meeting, or opportunity.
+2. Build a concise relationship history.
+3. Define the desired OK.
+4. Determine the current stage.
+5. Recommend one concrete next action.
+6. Draft or prepare that action.
+7. Track whether it was completed.
+8. Remind the user when follow-up is due.
+9. Continue until the opportunity is won, lost, or paused.
 
-- **Multiple expression options**: Safe/Standard, Strong/Direct, Casual, and Soft/Polite
-- **9 languages supported**: Japanese, English, Korean, Spanish, Chinese (Simplified & Traditional), French, Thai, Vietnamese
-- **Auto-detect input language**
-- **Text-to-Speech**: Google Cloud TTS (with browser fallback)
-- **Copy to clipboard**
-- **Responsive UI**
+## Current MVP
+
+The first version is designed for an individual founder or small agency owner, not a large enterprise sales team.
+
+Implemented screens:
+
+- `Today`: daily execution list, overdue actions, risks, and recommended actions.
+- `Relationships`: searchable people and companies with relationship strength, last contact, and next action context.
+- `Opportunities`: list and lightweight pipeline views around a specific desired OK.
+- `Opportunity detail`: current situation, known/inferred/unknown context, next action, draft, timeline, blockers, value, probability.
+- `Capture`: paste meeting notes, email text, chat notes, LinkedIn notes, or random context and extract structured relationship data.
+- `Action workspace`: draft a follow-up, mark actions done, schedule next follow-up, or pause weak opportunities.
+
+The MVP uses localStorage for a reliable manual workflow and realistic demo data. Supabase tables are included for persistence when auth-backed storage is wired in.
 
 ## Tech Stack
 
-- **Frontend**: Next.js 16, React, TypeScript, Tailwind CSS
-- **Backend**: Next.js API Routes
-- **AI**: Anthropic Claude API
-- **TTS**: Google Cloud Text-to-Speech (optional)
-- **Database**: Supabase (optional, for future features)
-- **Deployment**: Vercel
+- Next.js 16 App Router
+- React 19
+- TypeScript
+- Tailwind CSS
+- Supabase Auth and database foundation
+- Anthropic API foundation from the previous app
+- Stripe subscription foundation from the previous app
 
 ## Getting Started
 
-### Prerequisites
-
-- Node.js 18+
-- npm or yarn
-- Anthropic API key (required)
-- Google Cloud API key (optional, for better TTS)
-
-### Installation
-
-1. Clone the repository:
-```bash
-git clone https://github.com/your-username/sayok.git
-cd sayok
-```
-
-2. Install dependencies:
 ```bash
 npm install
-```
-
-3. Set up environment variables:
-```bash
-cp .env.example .env.local
-```
-
-4. Edit `.env.local` and add your API keys:
-```env
-ANTHROPIC_API_KEY=your_anthropic_api_key_here
-GOOGLE_CLOUD_API_KEY=your_google_cloud_api_key_here  # Optional
-```
-
-5. Run the development server:
-```bash
 npm run dev
 ```
 
-6. Open [http://localhost:3000](http://localhost:3000)
+Open [http://localhost:3000](http://localhost:3000).
 
-## Getting API Keys
+## Environment Variables
 
-### Anthropic API Key (Required)
-1. Go to [Anthropic Console](https://console.anthropic.com/)
-2. Sign up or log in
-3. Navigate to API Keys
-4. Create a new API key
-5. Copy and add to `.env.local`
+Copy `.env.example` to `.env.local` and configure what you need.
 
-### Google Cloud TTS API Key (Optional)
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a new project (or select existing)
-3. Enable "Cloud Text-to-Speech API"
-4. Go to Credentials > Create Credentials > API Key
-5. Copy and add to `.env.local`
+Required for AI-backed routes from the previous product:
 
-Note: If Google Cloud TTS is not configured, the app will use the browser's built-in speech synthesis.
-
-## Deployment to Vercel
-
-### Option 1: Deploy via Vercel Dashboard
-
-1. Push your code to GitHub
-2. Go to [Vercel](https://vercel.com)
-3. Import your repository
-4. Add environment variables:
-   - `ANTHROPIC_API_KEY`: Your Anthropic API key
-   - `GOOGLE_CLOUD_API_KEY`: Your Google Cloud API key (optional)
-5. Deploy
-
-### Option 2: Deploy via CLI
-
-1. Install Vercel CLI:
-```bash
-npm i -g vercel
+```env
+ANTHROPIC_API_KEY=
 ```
 
-2. Login and deploy:
-```bash
-vercel
+Required for login and future persisted relationship workspace:
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
 ```
 
-3. Add environment variables:
-```bash
-vercel env add ANTHROPIC_API_KEY
+Required only for subscription pages:
+
+```env
+STRIPE_SECRET_KEY=
+STRIPE_PRICE_MONTHLY=
+STRIPE_PRICE_YEARLY=
+STRIPE_WEBHOOK_SECRET=
 ```
 
-## Lead Discovery Workflow
+The relationship OS MVP can be evaluated without external integrations because it runs from demo data and localStorage.
 
-The `/new-deal` page is a real lead discovery and outreach workflow. A user enters a website URL, target market, and business goal. SayOK uses configured APIs to search for public organizations and contacts, then drafts outreach only when usable contact data is found.
+## Database
 
-Required production environment variables:
+Existing tables from the previous app:
 
-- `BRAVE_SEARCH_API_KEY`: finds public organizations and source pages.
-- `FIRECRAWL_API_KEY`: reads and summarizes the user's website.
-- `HUNTER_API_KEY`: finds and verifies public email addresses.
-- `ANTHROPIC_API_KEY`: analyzes the offer, ranks leads, segments intent, and writes outreach.
-- `SUPABASE_SERVICE_ROLE_KEY`: stores server-side intent data and email-gate captures.
+- `users`
+- `translation_history`
+- daily usage tables/RPC from `20260405120000_sayok_daily_usage.sql`
 
-Optional:
+New relationship OS migration:
 
-- `APOLLO_API_KEY`: reserved for contact enrichment when the Apollo plan supports API prospecting.
+```text
+supabase/migrations/20260718090000_relationship_os.sql
+```
 
-## Lead Intent Data Foundation
+New tables:
 
-Apply `supabase/migrations/20260612170000_lead_intent_foundation.sql` in Supabase before relying on `/new-deal` data capture.
+- `relationship_companies`
+- `relationship_people`
+- `relationship_opportunities`
+- `relationship_interactions`
+- `relationship_next_actions`
+- `relationship_drafts`
 
-Core tables:
-
-- `users`: captured Google or email-gate identities, company domain, auth provider, and optional marketing consent.
-- `lead_runs`: one row per valid lead-search submission, including raw URL, target market, business goal, referrer, locale, coarse IP country, and run status.
-- `run_results`: organizations and contacts found for each run, including role, source URL, and masked email only.
-- `run_segments`: LLM-derived structured tags for each run. `japan_market_intent` is an indexed top-level boolean for future marketplace segmentation.
-
-Query runs showing Japan-market intent:
+Each table is scoped by `user_id` and protected by row-level security. Useful query examples:
 
 ```sql
-SELECT
-  lr.id,
-  lr.created_at,
-  lr.input_url,
-  lr.target_market,
-  lr.business_goal,
-  u.email,
-  u.company_domain,
-  rs.target_region,
-  rs.goal_type,
-  rs.confidence
-FROM public.lead_runs lr
-JOIN public.run_segments rs ON rs.run_id = lr.id
-LEFT JOIN public.users u ON u.id = lr.user_id
-WHERE rs.japan_market_intent = true
-ORDER BY lr.created_at DESC;
+-- Today's open execution list
+select *
+from relationship_next_actions
+where user_id = auth.uid()
+  and status = 'open'
+  and (due_at is null or due_at <= now() + interval '1 day')
+order by due_at nulls last, priority;
 ```
 
-## Mantle Sepolia Escrow Demo
-
-The `/new-deal/settlement` route is a testnet-only outcome escrow demo for matched referrals. It is disabled unless `NEXT_PUBLIC_ESCROW_DEMO=true`.
-
-Safety boundaries:
-
-- The contract is for Mantle Sepolia only.
-- Use testnet USDC or a mock ERC20 only.
-- Production SayOK is not wired to this contract.
-- Users must approve every transaction in MetaMask.
-- Mainnet use requires a third-party security audit first.
-
-For the easiest demo, first deploy a mock ERC20 on Mantle Sepolia:
-
-```bash
-MANTLE_SEPOLIA_RPC_URL=https://rpc.sepolia.mantle.xyz \
-DEPLOYER_PRIVATE_KEY=0x_your_throwaway_testnet_deployer_key \
-MOCK_TOKEN_INITIAL_SUPPLY=10000 \
-MOCK_TOKEN_RECIPIENT=0x_wallet_that_will_deposit \
-npm run deploy:mock-token:mantle-sepolia
+```sql
+-- Active opportunities with no next action
+select *
+from relationship_opportunities
+where user_id = auth.uid()
+  and status = 'active'
+  and (next_action is null or length(trim(next_action)) = 0);
 ```
 
-The script writes the token address to:
-
-```text
-contracts/deployments/mantle-sepolia-mock-token.json
+```sql
+-- Relationships needing follow-up
+select *
+from relationship_people
+where user_id = auth.uid()
+  and next_follow_up_at <= now()
+order by next_follow_up_at;
 ```
 
-Use that address as `ESCROW_ERC20_ADDRESS` and `NEXT_PUBLIC_ESCROW_TOKEN_ADDRESS`.
+## Product Principles
 
-Deploy the demo escrow contract:
+- Default to action, not analysis.
+- One active opportunity should have one clear next action.
+- Do not make users maintain a traditional CRM.
+- Do not automatically send external messages.
+- Clearly distinguish known, inferred, and unknown context.
+- Challenge weak opportunities instead of encouraging endless chasing.
+- Keep external integrations optional until the internal workflow is useful.
 
-```bash
-MANTLE_SEPOLIA_RPC_URL=https://rpc.sepolia.mantle.xyz \
-ESCROW_ERC20_ADDRESS=0x_your_testnet_usdc_or_mock_erc20 \
-DEPLOYER_PRIVATE_KEY=0x_your_throwaway_testnet_deployer_key \
-npm run deploy:escrow:mantle-sepolia
-```
+## Non-goals
 
-The script refuses to deploy unless the connected chain id is `5003`. It writes the deployed address to:
+The first version does not build:
 
-```text
-contracts/deployments/mantle-sepolia.json
-```
+- Mass email campaigns
+- Email scraping
+- A fully autonomous outbound sales bot
+- A generic company research database
+- Enterprise CRM customization
+- Advanced revenue forecasting
+- Complex team permissions
+- Marketplace, matching, or payment logic for relationships
 
-Run the local demo:
+## Legacy App
 
-```bash
-NEXT_PUBLIC_ESCROW_DEMO=true \
-NEXT_PUBLIC_ESCROW_CONTRACT_ADDRESS=0x_deployed_escrow \
-NEXT_PUBLIC_ESCROW_TOKEN_ADDRESS=0x_testnet_usdc_or_mock_erc20 \
-NEXT_PUBLIC_ESCROW_TOKEN_DECIMALS=6 \
-NEXT_PUBLIC_MANTLE_SEPOLIA_RPC_URL=https://rpc.sepolia.mantle.xyz \
-npm run dev
-```
-
-Apply `supabase/migrations/20260614120000_escrow_settlement_audit.sql` before testing audit persistence. The `escrow_settlement_audits` table stores `referral_id`, `agent_reasoning`, `proposed_amount`, `payee`, `tx_hash`, `status`, and timestamps so the agent decision and on-chain proof stay linked.
-
-## Project Structure
-
-```
-sayok/
-├── src/
-│   ├── app/
-│   │   ├── api/
-│   │   │   ├── translate/    # Translation API (Anthropic)
-│   │   │   └── tts/          # Text-to-Speech API (Google Cloud)
-│   │   ├── layout.tsx
-│   │   ├── page.tsx
-│   │   └── globals.css
-│   ├── components/
-│   │   └── SayOK.tsx         # Main component
-│   └── lib/
-│       ├── translations.ts    # UI translations (9 languages)
-│       └── supabase.ts       # Supabase client (optional)
-├── .env.example
-├── vercel.json
-└── package.json
-```
-
-## License
-
-MIT
+The previous native-expression checker component still exists in `src/components/SayOK.tsx` and the old translation APIs remain available. They are no longer the primary product experience.

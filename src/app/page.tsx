@@ -1,5 +1,5 @@
-import SayOK from '@/components/SayOK';
+import RelationshipOS from '@/components/RelationshipOS';
 
 export default function Home() {
-  return <SayOK />;
+  return <RelationshipOS />;
 }

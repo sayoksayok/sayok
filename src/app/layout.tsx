@@ -1,27 +1,20 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
 import "./globals.css";
-
-const inter = Inter({
-  subsets: ["latin"],
-  display: "swap",
-});
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.sayok.chat";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
-  title: "SayOK — Make your message better before you send",
+  title: "SayOK — From first contact to OK",
   description:
-    "Communication optimizer for DMs, email, and social posts. Improve tone and clarity in any input language; output in the language you choose.",
+    "A relationship and deal execution OS for founders, consultants, agencies, and business developers.",
   keywords: [
-    "message rewriter",
-    "communication",
-    "DM",
-    "email",
-    "social media",
-    "multilingual",
-    "pre-send",
+    "relationship management",
+    "founder sales",
+    "business development",
+    "deal execution",
+    "follow-up",
+    "partnerships",
   ],
   icons: {
     icon: "/character.jpg",
@@ -29,8 +22,9 @@ export const metadata: Metadata = {
     apple: "/character.jpg",
   },
   openGraph: {
-    title: "SayOK — Make your message better before you send",
-    description: "Rewrite and refine messages before you send—any input language, your chosen output language.",
+    title: "SayOK — From first contact to OK",
+    description:
+      "Remember relationships, track opportunities, and prepare the next action that moves a conversation forward.",
     type: "website",
     images: ["/character.jpg"],
   },
@@ -43,9 +37,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={inter.className}>
-        {children}
-      </body>
+      <body>{children}</body>
     </html>
   );
 }
