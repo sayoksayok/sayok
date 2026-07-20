@@ -408,7 +408,7 @@ function expandSearchQueries(input: LeadDiscoveryInput, queries: string[]) {
     priority.add(`${target} accelerator partnership manager contact`)
   }
 
-  if (/doge|dogecoin|meme|ip|license|licensing|nft|crypto|web3|wallet|exchange|token|collectible|collectibles/.test(normalized)) {
+  if (/meme|ip|license|licensing|nft|crypto|web3|wallet|exchange|token|collectible|collectibles/.test(normalized)) {
     priority.add(`crypto wallet partnerships contact ${target}`)
     priority.add(`web3 wallet partnership manager contact ${target}`)
     priority.add(`crypto exchange partnerships contact ${target}`)
@@ -1171,19 +1171,14 @@ function buildFallbackOutreach(
   rows: { contact: Contact | null; lead: Lead; suggestedContactPath?: string }[],
 ): OutreachMessage[] {
   const facts = buildOfferFacts(website.content)
-  const isDogeIp = /doge|dogecoin|ip|license|licensing|nft|crypto|web3|wallet|exchange|collectible/.test(`${input.goal} ${analysis.product}`.toLowerCase())
 
   return rows.slice(0, 12).map(({ contact, lead }) => {
     const recipient = contact?.name && contact.name !== 'Public contact' ? contact.name : 'team'
     const contactId = contact?.id || `${lead.id}:no-contact`
-    const subject = isDogeIp
-      ? `DOGE IP partnership idea for ${lead.organizationName}`
-      : `Partnership idea for ${lead.organizationName}`
+    const subject = `Partnership idea for ${lead.organizationName}`
 
     const email = input.outreachTemplate?.trim()
       ? personalizeOutreachTemplate(input.outreachTemplate, lead, analysis)
-      : isDogeIp
-      ? `Hi ${recipient},\n\nI’m reaching out from Own The Doge. We’re exploring partnerships with teams that already reach crypto-native users and could use licensed DOGE IP for campaigns, community activations, digital collectibles, wallet experiences, or co-marketing.\n\n${lead.organizationName} stood out because ${lead.reasonForFit.charAt(0).toLowerCase()}${lead.reasonForFit.slice(1)}.\n\nWould you be the right person to discuss licensing or brand partnership opportunities, or could you point me to whoever handles partnerships/licensing?\n\nIf there is a fit, I’d be happy to share a few concrete campaign ideas and examples of how DOGE IP can drive engagement without feeling like a generic sponsorship.\n\nWould it be worth a short call next week?`
       : `Hi ${recipient},\n\nI’m reaching out from ${analysis.product}. ${facts[0]}\n\n${lead.organizationName} stood out because ${lead.reasonForFit.charAt(0).toLowerCase()}${lead.reasonForFit.slice(1)}.\n\nI wanted to ask whether this could be useful for your audience, members, customers, or students. If relevant, we can make the first step very low-friction and adapt the offer around your needs.\n\nWould you be open to a short call next week to see if there is a practical fit?`
 
     return {
@@ -1191,9 +1186,9 @@ function buildFallbackOutreach(
       contactId,
       subject,
       email,
-      linkedin: `Hi ${recipient}, I’m with ${isDogeIp ? 'Own The Doge' : analysis.product}. I had a partnership idea for ${lead.organizationName} and wanted to ask who handles ${isDogeIp ? 'IP/licensing or brand partnerships' : 'partnerships'} on your side. Worth a quick note?`,
-      whatsapp: `Hi ${recipient}, quick question. Who is best to contact at ${lead.organizationName} about ${isDogeIp ? 'DOGE IP/licensing partnerships' : 'a possible partnership'}?`,
-      followUp: `Hi ${recipient}, just following up on this. If you are not the right person for ${isDogeIp ? 'licensing or partnerships' : 'partnerships'}, could you point me to the right team? Happy to send a shorter overview.`,
+      linkedin: `Hi ${recipient}, I’m with ${analysis.product}. I had a partnership idea for ${lead.organizationName} and wanted to ask who handles partnerships on your side. Worth a quick note?`,
+      whatsapp: `Hi ${recipient}, quick question. Who is best to contact at ${lead.organizationName} about a possible partnership?`,
+      followUp: `Hi ${recipient}, just following up on this. If you are not the right person for partnerships, could you point me to the right team? Happy to send a shorter overview.`,
     }
   })
 }
@@ -1206,16 +1201,14 @@ function personalizeOutreachTemplate(template: string, lead: Lead, analysis: Web
     .replaceAll('{{company}}', organization)
     .replaceAll('{{reason}}', reason)
     .replaceAll('{{product}}', analysis.product)
-    .replaceAll('Bitcoin.com', organization)
-    .replaceAll('bitcoin.com', organization)
     .replace(/\n{3,}/g, '\n\n')
     .trim()
 }
 
 function suggestContactPath(input: LeadDiscoveryInput, lead: Lead) {
   const text = `${input.goal} ${lead.category} ${lead.reasonForFit}`.toLowerCase()
-  if (/doge|dogecoin|ip|license|licensing|nft|crypto|web3|wallet|exchange|collectible/.test(text)) {
-    return 'Best path: Head of Partnerships, Business Development, Licensing, Brand Partnerships, Community/Growth, or Founder. Ask who handles IP/licensing or partnership campaigns.'
+  if (/ip|license|licensing|nft|crypto|web3|wallet|exchange|collectible/.test(text)) {
+    return 'Best path: Head of Partnerships, Business Development, Licensing, Brand Partnerships, Community/Growth, or Founder. Ask who handles licensing or partnership campaigns.'
   }
   if (/university|school|student|language|program|club/.test(text)) {
     return 'Best path: Program Director, Department Coordinator, Club President, Study Abroad Director, or Community/Events Lead.'
@@ -1235,14 +1228,8 @@ function buildOfferFacts(content: string) {
   if (/group lessons|class and group lessons|classroom|study group|clubs?|companies/.test(text)) {
     facts.push('Group/class lessons are available for classrooms, study groups, companies, clubs, and other organizations.')
   }
-  if (/education services australia/.test(text)) {
-    facts.push('Kakehashi has partnered with Education Services Australia to bring native Japanese teachers to classrooms.')
-  }
-  if (/punipunijapan/.test(text)) {
-    facts.push('Kakehashi is connected with PuniPuniJapan, a Japanese learning brand with existing learner audiences and social channels.')
-  }
   if (/finding japanese school|support your life in japan|finding job in japan|japanese email support|japanese telephone assistance/.test(text)) {
-    facts.push('Kakehashi also offers Japan-side support such as finding Japanese schools and support for life in Japan.')
+    facts.push('The service also offers Japan-side support such as finding Japanese schools and support for life in Japan.')
   }
   if (/free trial|trial lesson/.test(text)) {
     facts.push('Students can start with a free trial lesson.')

@@ -16,7 +16,7 @@ function fallbackDraft(opportunity: Opportunity, person?: Person, company?: Comp
   const companyName = company?.name || person?.company || 'your team';
   return {
     subject: `Next step for ${companyName}`,
-    body: `Hi ${firstName},\n\nI wanted to follow up on ${opportunity.title}.\n\nThe useful next step seems to be: ${opportunity.desiredOk}\n\nWould you be open to a short call this week to decide whether this is worth moving forward?\n\nBest,\nYudai`,
+    body: `Hi ${firstName},\n\nI wanted to follow up on ${opportunity.title}.\n\nThe useful next step seems to be: ${opportunity.desiredOk}\n\nWould you be open to a short call this week to decide whether this is worth moving forward?\n\nBest,\nYour name`,
     followUpTiming: 'Follow up in five business days unless they reply.',
   };
 }

@@ -97,31 +97,31 @@ type AppState = {
   tasks: ExecutionTask[];
 };
 
-const STORAGE_KEY = 'sayok_execution_os_v2';
+const STORAGE_KEY = 'sayok_execution_os_v3';
 
 const demoState: AppState = {
   user: {
-    name: 'Yudai Ishida',
-    email: 'yudai@example.com',
+    name: 'Guest user',
+    email: 'Not signed in',
   },
-  activeWorkspaceId: 'ws-altlier-doge',
+  activeWorkspaceId: 'ws-demo-agency',
   workspaces: [
     {
-      id: 'ws-altlier-doge',
-      name: 'ALTLIER + Own The Doge',
-      role: 'Founder / Japan Lead Director',
+      id: 'ws-demo-agency',
+      name: 'Demo agency workspace',
+      role: 'Founder-led business development',
       operatingContext:
-        'Outbound partnerships, Japan/APAC growth, Web3 campaigns, official DOGE IP licensing, events, and community activations.',
-      activeGoal: 'Turn warm crypto and technology relationships into meetings, proposals, and paid collaborations.',
-      owner: 'Yudai Ishida',
+        'Client acquisition, partnerships, event conversations, proposals, and relationship follow-up for a small consulting business.',
+      activeGoal: 'Turn warm relationships into meetings, proposals, and signed client work.',
+      owner: 'Guest user',
     },
     {
-      id: 'ws-kakehashi',
-      name: 'Kakehashi Japan',
-      role: 'Founder-led growth',
-      operatingContext: 'Online Japanese lessons, university partnerships, group lessons, and short-term Japan learning experiences.',
-      activeGoal: 'Get student acquisition partners and group lesson opportunities in the United States.',
-      owner: 'Yudai Ishida',
+      id: 'ws-demo-partnerships',
+      name: 'Demo partnerships workspace',
+      role: 'Partnership operator',
+      operatingContext: 'Warm introductions, sponsor conversations, community partnerships, and meeting follow-up.',
+      activeGoal: 'Keep partnership conversations moving without losing follow-up timing.',
+      owner: 'Guest user',
     },
   ],
   integrations: [
@@ -160,32 +160,32 @@ const demoState: AppState = {
   ],
   companyProfiles: [
     {
-      id: 'profile-altlier-doge',
-      workspaceId: 'ws-altlier-doge',
-      name: 'ALTLIER + Own The Doge',
-      websites: ['https://altlier.io', 'https://ownthedoge.com'],
+      id: 'profile-demo-agency',
+      workspaceId: 'ws-demo-agency',
+      name: 'Demo agency',
+      websites: ['https://example.com'],
       positioning:
-        'ALTLIER helps AI, Web3, and technology companies grow across Japan and APAC through partnerships, communities, events, creator campaigns, and localized marketing. Own The Doge stewards the original DOGE IP and supports licensing, collaborations, and engagement campaigns.',
+        'A small consulting agency helps technology companies enter new markets through partner development, localized campaigns, events, and founder-led sales support.',
       offers: [
-        'Japan and APAC growth initiatives',
-        'Community activations and campaigns',
-        'Official DOGE IP licensing opportunities',
-        'Co-branded marketing and loyalty experiences',
-        'Event and conference partnerships',
+        'Market-entry sprint',
+        'Partner outreach',
+        'Event and community activation',
+        'Proposal and follow-up support',
+        'Founder-led sales operations',
       ],
-      proof: ['Own The Doge Japan leadership', 'PuniPuni Japan audience', 'Japan Web3/event network', 'ALTLIER growth and market-entry work'],
-      defaultSignature: 'Yudai Ishida\nFounder, ALTLIER\nJapan Lead Director, Own The Doge',
+      proof: ['Past consulting work', 'Warm founder network', 'Event operating experience', 'Localized campaign execution'],
+      defaultSignature: 'Your name\nFounder, Demo agency',
     },
     {
-      id: 'profile-kakehashi',
-      workspaceId: 'ws-kakehashi',
-      name: 'Kakehashi Japan',
-      websites: ['https://kakehashijapan.com'],
+      id: 'profile-demo-partnerships',
+      workspaceId: 'ws-demo-partnerships',
+      name: 'Demo partnerships team',
+      websites: ['https://example.org'],
       positioning:
-        'Kakehashi provides online Japanese lessons with native Japanese teachers and can support one-on-one lessons, group lessons, cultural learning, and short-term Japan learning experiences.',
-      offers: ['1-on-1 Japanese lessons', 'Group Japanese lessons', 'University or club partnerships', 'Short-term Japan learning experiences'],
-      proof: ['Native Japanese teachers', 'Japan-based learning context', 'Flexible online lessons'],
-      defaultSignature: 'Yudai Ishida\nKakehashi Japan',
+        'A lean partnerships team develops warm collaboration opportunities with communities, event organizers, agencies, and strategic partners.',
+      offers: ['Partnership intro call', 'Co-marketing concept', 'Sponsor activation package', 'Community collaboration'],
+      proof: ['Existing partner relationships', 'Clear event follow-through', 'Fast proposal turnaround'],
+      defaultSignature: 'Your name\nPartnerships',
     },
   ],
   agents: [
@@ -228,30 +228,30 @@ const demoState: AppState = {
   ],
   tasks: [
     {
-      id: 'task-bitcoin',
-      workspaceId: 'ws-altlier-doge',
+      id: 'task-partner-followup',
+      workspaceId: 'ws-demo-agency',
       agentId: 'agent-follow-up',
-      title: 'Send tailored Bitcoin.com partnership follow-up',
-      company: 'Bitcoin.com',
-      person: 'Maya Rodriguez',
-      desiredOk: 'Get agreement to discuss a DOGE IP / Japan-APAC campaign collaboration.',
+      title: 'Send tailored partner follow-up',
+      company: 'Example partner company',
+      person: 'Partnership lead',
+      desiredOk: 'Get agreement to discuss a focused collaboration call.',
       reason: 'Warm intro exists. Generic outreach is weak; this needs concrete collaboration ideas and proof.',
       preparedAction:
-        'Send a short email referencing ALTLIER, Own The Doge, PuniPuni Japan audience, and three specific collaboration angles. Ask if Maya owns partnerships or can point to the right contact.',
+        'Send a short email referencing the previous introduction, three specific collaboration angles, and a clear 30-minute meeting ask. Confirm whether this person owns partnerships or can point to the right contact.',
       due: 'Today',
       priority: 'high',
       status: 'needs_approval',
       approvalRequired: true,
     },
     {
-      id: 'task-webx',
-      workspaceId: 'ws-altlier-doge',
+      id: 'task-sponsor-proposal',
+      workspaceId: 'ws-demo-agency',
       agentId: 'agent-proposal',
-      title: 'Prepare WebX sponsor activation proposal',
-      company: 'WebX Conference',
-      person: 'Aiko Sato',
-      desiredOk: 'Aiko approves a one-page sponsor activation outline and forwards it to sponsors.',
-      reason: 'Aiko asked for a proposal. This is a clear commitment, not a cold lead.',
+      title: 'Prepare sponsor activation proposal',
+      company: 'Example event organizer',
+      person: 'Event director',
+      desiredOk: 'The organizer approves a one-page sponsor activation outline and forwards it to sponsor candidates.',
+      reason: 'The organizer asked for a proposal. This is a clear commitment, not a cold lead.',
       preparedAction: 'Draft a one-page proposal with event presence, community activation, creator content, and post-event follow-up.',
       due: 'Today',
       priority: 'high',
@@ -259,15 +259,15 @@ const demoState: AppState = {
       approvalRequired: true,
     },
     {
-      id: 'task-kakehashi',
-      workspaceId: 'ws-kakehashi',
+      id: 'task-community-followup',
+      workspaceId: 'ws-demo-partnerships',
       agentId: 'agent-follow-up',
-      title: 'Follow up with university Japanese program',
-      company: 'University Japanese Program',
-      person: 'Program Coordinator',
-      desiredOk: 'Book a short call about group lessons and short-term Japan learning options.',
-      reason: 'For a university audience, the message must mention group lessons and study/Japan experience value, not only 1-on-1 lessons.',
-      preparedAction: 'Send a concise email offering group Japanese practice, optional short-term Japan learning, and a no-pressure intro call.',
+      title: 'Follow up with community program',
+      company: 'Example community group',
+      person: 'Program coordinator',
+      desiredOk: 'Book a short call about a group collaboration.',
+      reason: 'For a community audience, the message must mention group value and a clear next step, not a generic service pitch.',
+      preparedAction: 'Send a concise email offering a simple group collaboration and a no-pressure intro call.',
       due: 'Tomorrow',
       priority: 'medium',
       status: 'needs_approval',
@@ -275,11 +275,11 @@ const demoState: AppState = {
     },
     {
       id: 'task-weak',
-      workspaceId: 'ws-altlier-doge',
+      workspaceId: 'ws-demo-agency',
       agentId: 'agent-health',
-      title: 'Pause weak SaaS lead',
-      company: 'Unclear SaaS startup',
-      person: 'Daniel Kim',
+      title: 'Pause weak opportunity',
+      company: 'Unclear prospect',
+      person: 'Unqualified contact',
       desiredOk: 'Stop spending time unless a concrete need appears.',
       reason: 'Three follow-ups, no meaningful reply, no decision-maker, no budget, no urgency.',
       preparedAction: 'Send one close-the-loop note or mark paused.',
@@ -312,7 +312,7 @@ function saveState(state: AppState) {
 export default function SayOKExecutionOS() {
   const [state, setState] = useState<AppState>(() => loadState());
   const [view, setView] = useState<View>('today');
-  const [selectedTaskId, setSelectedTaskId] = useState('task-bitcoin');
+  const [selectedTaskId, setSelectedTaskId] = useState('task-partner-followup');
 
   useEffect(() => saveState(state), [state]);
 
@@ -347,7 +347,7 @@ export default function SayOKExecutionOS() {
   function resetDemo() {
     window.localStorage.removeItem(STORAGE_KEY);
     setState(demoState);
-    setSelectedTaskId('task-bitcoin');
+    setSelectedTaskId('task-partner-followup');
     setView('today');
   }
 

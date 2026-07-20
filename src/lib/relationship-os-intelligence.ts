@@ -141,15 +141,7 @@ export function draftForOpportunity(workspace: RelationshipWorkspace, opportunit
   body += `The useful next step seems to be: ${opportunity.desiredOk}\n\n`;
   if (blocker) body += `${blocker}.\n\n`;
   body += `I can prepare a short, practical next step rather than a long deck. Would you be open to a 30-minute call this week to decide whether this is worth moving forward?\n\n`;
-  body += `Best,\nYudai`;
-
-  if (opportunity.id.includes('bitcoincom')) {
-    body = `Hi ${name},\n\nI am reaching out from ALTLIER and Own The Doge.\n\nALTLIER helps AI, Web3, and technology companies grow across Japan and APAC through partnerships, community building, events, creator campaigns, and localized marketing.\n\nOwn The Doge is the steward of the original DOGE IP and works with brands, platforms, and communities on official licensing, collaborations, and engagement campaigns.\n\nI think there may be a useful fit with ${companyName}, especially around Japan/APAC growth, community activations, digital collectibles, loyalty experiences, and official DOGE IP collaboration.\n\nRather than sending a generic pitch, I can share a few concrete ideas tailored to ${companyName}. Would you be the right person to discuss partnerships or licensing opportunities, or could you point me to the right contact?\n\nIf there is interest, I would be happy to compare priorities on a short call.\n\nBest,\nYudai Ishida\nFounder, ALTLIER\nJapan Lead Director, Own The Doge`;
-  }
-
-  if (opportunity.id.includes('webx')) {
-    body = `Hi ${name},\n\nFollowing up on our call, I will prepare a one-page sponsor activation outline for ${companyName}.\n\nThe proposal will focus on a simple package: event presence, community activation, creator/social content, and post-event follow-up so sponsors can see concrete value beyond logo placement.\n\nI will keep it practical and easy for you to forward. Once you review it, I can adjust the positioning before you share it with sponsor candidates.\n\nBest,\nYudai`;
-  }
+  body += `Best,\nYour name`;
 
   return {
     id: uid('draft'),

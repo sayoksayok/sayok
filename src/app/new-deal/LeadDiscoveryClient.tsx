@@ -22,14 +22,12 @@ I found your Japanese language program and thought this might be useful for stud
 
 We provide live online Japanese lessons with native teachers, and we can support both 1-on-1 lessons and small group sessions for university programs.
 
-We also run PuniPuniJapan, a Japanese learning community used by learners worldwide, so we have experience creating approachable Japanese study content and helping learners stay motivated.
-
 For students who want to go further, we can also introduce short-term study options in Japan.
 
 Would you be open to a quick conversation about whether this could support your students this semester?
 
 Best,
-Yudai`
+Your name`
 
 type SavedLeadRun = {
   id: string

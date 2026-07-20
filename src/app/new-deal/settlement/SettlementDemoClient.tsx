@@ -21,7 +21,7 @@ const referral = {
   payee: escrowDemoPayee,
   amount: '25',
   condition: 'reply received / intro accepted',
-  context: 'A Japanese language program accepted an introduction for Kakehashi-style online lessons.',
+  context: 'A language program accepted an introduction for online lessons.',
 }
 
 export default function SettlementDemoClient() {

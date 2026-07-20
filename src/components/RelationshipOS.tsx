@@ -445,7 +445,7 @@ function TodayView({
           />
           <InsightCard
             title="Highest leverage action"
-            body="Aiko already asked for a sponsor outline. Preparing it has higher odds than more cold outreach."
+            body="The event organizer already asked for a sponsor outline. Preparing it has higher odds than more cold outreach."
             action="Prepare proposal today."
           />
           <RecentActivity workspace={workspace} />
@@ -756,7 +756,7 @@ function CaptureView({
           value={raw}
           onChange={(event) => setRaw(event.target.value)}
           className="mt-5 min-h-[300px] w-full resize-y rounded-2xl border border-stone-200 bg-stone-50 p-4 text-sm leading-6 outline-none focus:border-orange-400 focus:bg-white"
-          placeholder="Example: Met Koki from NovaAI at WebX. He is interested in Japan expansion but unsure about budget. I promised to send a 30-day validation plan and ask for a call next week."
+          placeholder="Example: Met a founder from NovaAI at an event. He is interested in market expansion but unsure about budget. I promised to send a 30-day validation plan and ask for a call next week."
         />
         <div className="mt-4 flex flex-wrap gap-2">
           <button
