@@ -424,7 +424,7 @@ export default function WorkOS() {
         due_at: status === 'waiting_on_someone' ? null : due,
         follow_up_at: status === 'waiting_on_someone' ? due : null,
         waiting_for_person: waitingForPerson,
-        owner_name: status === 'delegated' ? waitingForPerson || 'Delegated' : 'Me',
+        owner_name: 'Me',
       })
       .select()
       .single();
