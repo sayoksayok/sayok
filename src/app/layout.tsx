@@ -5,9 +5,9 @@ const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.sayok.chat";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
-  title: "SayOK — From first contact to OK",
+  title: "SayOK — Private Work OS",
   description:
-    "An execution OS that turns workspace context, company data, agents, and approvals into the next action that earns an OK.",
+    "A private AI work operating system for founder tasks, projects, waiting items, prepared work, and activity history.",
   keywords: [
     "relationship management",
     "founder sales",
@@ -24,9 +24,9 @@ export const metadata: Metadata = {
     apple: "/character.jpg",
   },
   openGraph: {
-    title: "SayOK — From first contact to OK",
+    title: "SayOK — Private Work OS",
     description:
-      "Workspace context, company memory, agents, and approvals for moving real business relationships forward.",
+      "Private founder work state, quick capture, waiting workflows, prepared work, and activity history.",
     type: "website",
     images: ["/character.jpg"],
   },

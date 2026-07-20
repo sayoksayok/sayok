@@ -1,5 +1,5 @@
-import SayOKExecutionOS from '@/components/SayOKExecutionOS';
+import WorkOS from '@/components/WorkOS';
 
 export default function Home() {
-  return <SayOKExecutionOS />;
+  return <WorkOS />;
 }
