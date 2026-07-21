@@ -5,18 +5,17 @@ const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.sayok.chat";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
-  title: "SayOK — Private Work OS",
+  title: "SayOK — Private AI Work OS",
   description:
-    "A private AI work operating system for founder tasks, projects, waiting items, prepared work, and activity history.",
+    "A private AI work operating system that helps founders organize tasks, projects, approvals, prepared work, and activity history.",
   keywords: [
-    "relationship management",
-    "founder sales",
-    "business development",
-    "deal execution",
-    "agents",
-    "approvals",
-    "follow-up",
-    "partnerships",
+    "private work operating system",
+    "founder productivity",
+    "project memory",
+    "approval workflow",
+    "task execution",
+    "activity history",
+    "work assistant",
   ],
   icons: {
     icon: "/character.jpg",
@@ -24,9 +23,9 @@ export const metadata: Metadata = {
     apple: "/character.jpg",
   },
   openGraph: {
-    title: "SayOK — Private Work OS",
+    title: "SayOK — Private AI Work OS",
     description:
-      "Private founder work state, quick capture, waiting workflows, prepared work, and activity history.",
+      "Private founder work state, quick capture, approval workflows, prepared work, and activity history.",
     type: "website",
     images: ["/character.jpg"],
   },

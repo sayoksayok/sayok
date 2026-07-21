@@ -582,10 +582,10 @@ export default function WorkOS() {
     return (
       <main className="min-h-screen bg-[#f7f4ee] px-4 py-10 text-slate-950">
         <section className="mx-auto max-w-xl rounded-3xl border border-stone-200 bg-white p-8 shadow-sm">
-          <p className="text-xs font-black uppercase tracking-[0.18em] text-orange-700">Private work OS</p>
-          <h1 className="mt-4 text-4xl font-black tracking-tight">SayOK starts after login.</h1>
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-orange-700">Private AI work OS</p>
+          <h1 className="mt-4 text-4xl font-black tracking-tight">SayOK starts in your private workspace.</h1>
           <p className="mt-4 text-sm font-semibold leading-6 text-slate-600">
-            No company data, tasks, recommendations, or demo work is shown on public routes. Sign in to create a private workspace.
+            Your agent organizes projects, tasks, approvals, prepared work, and activity history after login. Public routes never show private company data or demo customer information.
           </p>
           <button onClick={signInWithGoogle} className="mt-6 w-full rounded-2xl bg-slate-950 px-5 py-4 text-sm font-black text-white hover:bg-slate-800">
             Continue with Google
@@ -620,7 +620,7 @@ export default function WorkOS() {
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3">
           <div>
             <p className="text-xl font-black text-orange-600">SayOK</p>
-            <p className="text-xs font-bold text-slate-500">Private work operating system</p>
+            <p className="text-xs font-bold text-slate-500">Private AI work operating system</p>
           </div>
           <div className="flex items-center gap-2">
             <select value={workspaceId || ''} onChange={(event) => setWorkspaceId(event.target.value)} className="max-w-[220px] rounded-full border border-stone-200 bg-white px-3 py-2 text-sm font-black">
@@ -759,7 +759,7 @@ function TodayView({
           <Metric label="Completed today" value={completedToday.length} />
         </div>
         <p className="mt-4 text-sm font-semibold text-slate-600">
-          SayOK only shows work that is active now. Done, cancelled, not relevant, archived, and waiting items before follow-up date are removed from active recommendations.
+          SayOK only shows work that is active now. Done, cancelled, not relevant, archived, and waiting items before their next review date are removed from active recommendations.
         </p>
       </Panel>
 
