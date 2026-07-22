@@ -111,6 +111,16 @@ type PreparedWork = {
   created_at: string;
 };
 
+type LocalState = {
+  workspaceId: string | null;
+  workspaces: Workspace[];
+  projects: Project[];
+  tasks: WorkTask[];
+  activity: Activity[];
+  prepared: PreparedWork[];
+};
+
+const localStorageKey = 'sayok.workos.local.v1';
 const terminalStatuses: WorkStatus[] = ['done', 'cancelled', 'not_relevant', 'archived'];
 const activeStatuses: WorkStatus[] = ['inbox', 'needs_clarification', 'ready', 'in_progress', 'prepared_by_sayok', 'needs_user_approval', 'scheduled', 'blocked'];
 const navItems: { id: View; label: string }[] = [
@@ -198,8 +208,62 @@ function cleanTitle(text: string) {
   return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
 }
 
+function newId(prefix: string) {
+  return `${prefix}_${crypto.randomUUID()}`;
+}
+
+function loadLocalState(): LocalState | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(localStorageKey);
+    if (!raw) return null;
+    return JSON.parse(raw) as LocalState;
+  } catch {
+    return null;
+  }
+}
+
+function saveLocalState(state: LocalState) {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(localStorageKey, JSON.stringify(state));
+}
+
+function createDefaultLocalState(): LocalState {
+  const workspaceId = newId('workspace');
+  return {
+    workspaceId,
+    workspaces: [
+      {
+        id: workspaceId,
+        owner_id: 'local-user',
+        name: 'Private Workspace',
+        company_name: null,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Tokyo',
+      },
+    ],
+    projects: [],
+    tasks: [],
+    activity: [
+      {
+        id: newId('activity'),
+        workspace_id: workspaceId,
+        task_id: null,
+        project_id: null,
+        actor_type: 'sayok',
+        event_type: 'workspace_started',
+        summary: 'Started a private local workspace.',
+        payload: {},
+        created_at: new Date().toISOString(),
+      },
+    ],
+    prepared: [],
+  };
+}
+
 export default function WorkOS() {
   const [user, setUser] = useState<User | null>(null);
+  const [localMode, setLocalMode] = useState(false);
+  const [localHydrated, setLocalHydrated] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
   const [view, setView] = useState<View>('today');
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
@@ -223,15 +287,26 @@ export default function WorkOS() {
   const activeWorkspace = workspaces.find((workspace) => workspace.id === workspaceId) || null;
 
   useEffect(() => {
+    if (!localMode || !localHydrated) return;
+    saveLocalState({ workspaceId, workspaces, projects, tasks, activity, prepared });
+  }, [activity, localHydrated, localMode, prepared, projects, tasks, workspaceId, workspaces]);
+
+  useEffect(() => {
     if (!supabase) {
       setAuthLoading(false);
       return;
     }
 
-    supabase.auth.getUser().then(({ data }) => {
-      setUser(data.user);
-      setAuthLoading(false);
-    });
+    supabase.auth
+      .getUser()
+      .then(({ data }) => {
+        setUser(data.user);
+        setAuthLoading(false);
+      })
+      .catch(() => {
+        setMessage('Google login is temporarily unavailable. You can start a private browser workspace now.');
+        setAuthLoading(false);
+      });
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user || null);
@@ -241,6 +316,7 @@ export default function WorkOS() {
   }, []);
 
   useEffect(() => {
+    if (localMode) return;
     if (!user) {
       setWorkspaces([]);
       setWorkspaceId(null);
@@ -250,8 +326,21 @@ export default function WorkOS() {
   }, [user]);
 
   useEffect(() => {
-    if (workspaceId) void loadWorkspaceData(workspaceId);
-  }, [workspaceId]);
+    if (workspaceId && !localMode) void loadWorkspaceData(workspaceId);
+  }, [localMode, workspaceId]);
+
+  function startLocalWorkspace() {
+    const state = loadLocalState() || createDefaultLocalState();
+    setWorkspaces(state.workspaces);
+    setWorkspaceId(state.workspaceId);
+    setProjects(state.projects);
+    setTasks(state.tasks);
+    setActivity(state.activity);
+    setPrepared(state.prepared);
+    setLocalMode(true);
+    setLocalHydrated(true);
+    setMessage(null);
+  }
 
   async function loadWorkspaces() {
     if (!supabase || !user) return;
@@ -284,7 +373,10 @@ export default function WorkOS() {
   }
 
   async function signInWithGoogle() {
-    if (!supabase) return;
+    if (!supabase) {
+      setMessage('Google login is not configured yet. Use a private browser workspace for now.');
+      return;
+    }
     setBusy(true);
     setMessage(null);
     const authReady = await checkAuthHealth();
@@ -307,12 +399,56 @@ export default function WorkOS() {
   }
 
   async function signOut() {
+    if (localMode) {
+      setLocalMode(false);
+      setLocalHydrated(false);
+      setUser(null);
+      setWorkspaces([]);
+      setWorkspaceId(null);
+      setProjects([]);
+      setTasks([]);
+      setActivity([]);
+      setPrepared([]);
+      setView('today');
+      return;
+    }
     if (!supabase) return;
     await supabase.auth.signOut();
     setUser(null);
   }
 
   async function createWorkspace() {
+    if (localMode) {
+      if (!workspaceName.trim()) return;
+      const workspace: Workspace = {
+        id: newId('workspace'),
+        owner_id: 'local-user',
+        name: workspaceName.trim(),
+        company_name: companyName.trim() || null,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Tokyo',
+      };
+      setWorkspaces((current) => [...current, workspace]);
+      setWorkspaceId(workspace.id);
+      setProjects([]);
+      setTasks([]);
+      setPrepared([]);
+      setActivity([
+        {
+          id: newId('activity'),
+          workspace_id: workspace.id,
+          task_id: null,
+          project_id: null,
+          actor_type: 'user',
+          event_type: 'workspace_created',
+          summary: `Created workspace ${workspace.name}`,
+          payload: { company_name: companyName.trim() || null },
+          created_at: new Date().toISOString(),
+        },
+      ]);
+      setWorkspaceName('');
+      setCompanyName('');
+      return;
+    }
     if (!supabase || !user || !workspaceName.trim()) return;
     setBusy(true);
     const newWorkspaceId = crypto.randomUUID();
@@ -360,6 +496,23 @@ export default function WorkOS() {
   }
 
   async function createActivity(workspace: string, taskId: string | null, eventType: string, summary: string, payload: Record<string, unknown> = {}, actorType: 'user' | 'sayok' | 'integration' = 'user') {
+    if (localMode) {
+      setActivity((current) => [
+        {
+          id: newId('activity'),
+          workspace_id: workspace,
+          task_id: taskId,
+          project_id: null,
+          actor_type: actorType,
+          event_type: eventType,
+          summary,
+          payload,
+          created_at: new Date().toISOString(),
+        },
+        ...current,
+      ]);
+      return;
+    }
     if (!supabase) return;
     await supabase.from('work_os_activity_events').insert({
       workspace_id: workspace,
@@ -372,7 +525,14 @@ export default function WorkOS() {
   }
 
   async function patchTask(task: WorkTask, patch: Partial<WorkTask>, eventType: string, summary: string, payload: Record<string, unknown> = {}, actorType: 'user' | 'sayok' | 'integration' = 'user') {
-    if (!supabase || !workspaceId) return;
+    if (!workspaceId) return;
+    if (localMode) {
+      const now = new Date().toISOString();
+      setTasks((current) => current.map((item) => (item.id === task.id ? { ...item, ...patch, updated_at: now, last_event_at: now } : item)));
+      await createActivity(workspaceId, task.id, eventType, summary, { from_status: task.status, to_status: patch.status, ...payload }, actorType);
+      return;
+    }
+    if (!supabase) return;
     const { error } = await supabase
       .from('work_os_tasks')
       .update({ ...patch, updated_at: new Date().toISOString(), last_event_at: new Date().toISOString() })
@@ -387,9 +547,16 @@ export default function WorkOS() {
   }
 
   async function deleteTask(task: WorkTask) {
-    if (!supabase || !workspaceId) return;
+    if (!workspaceId) return;
     const confirmed = window.confirm(`Delete "${task.title}"? This removes the task and its activity links.`);
     if (!confirmed) return;
+    if (localMode) {
+      setTasks((current) => current.filter((item) => item.id !== task.id));
+      setPrepared((current) => current.filter((item) => item.task_id !== task.id));
+      await createActivity(workspaceId, task.id, 'task_deleted', `Deleted "${task.title}".`, {});
+      return;
+    }
+    if (!supabase) return;
     const { error } = await supabase.from('work_os_tasks').delete().eq('id', task.id).eq('workspace_id', workspaceId);
     if (error) setMessage(`Could not delete task: ${error.message}`);
     await loadWorkspaceData(workspaceId);
@@ -407,7 +574,7 @@ export default function WorkOS() {
   }
 
   async function handleQuickCapture() {
-    if (!supabase || !workspaceId || !quickCapture.trim()) return;
+    if (!workspaceId || !quickCapture.trim()) return;
     const text = quickCapture.trim();
     const lower = text.toLowerCase();
     const isAlreadyDone = /\balready\b|sent .* elsewhere|messaged|emailed|discussed .* in person|decided not to pursue/.test(lower);
@@ -424,6 +591,44 @@ export default function WorkOS() {
     const status: WorkStatus = /waiting on|wait for|waiting for/.test(lower) ? 'waiting_on_someone' : /prepare|draft|proposal/.test(lower) ? 'ready' : 'inbox';
     const waitingForPerson = status === 'waiting_on_someone' ? extractPerson(text) : null;
     const due = inferDueDate(text);
+    if (localMode) {
+      const now = new Date().toISOString();
+      const task: WorkTask = {
+        id: newId('task'),
+        workspace_id: workspaceId,
+        project_id: null,
+        title: cleanTitle(text),
+        description: text,
+        client_company: null,
+        owner_name: 'Me',
+        source: 'quick_capture',
+        status,
+        priority: inferPriority(text),
+        due_at: status === 'waiting_on_someone' ? null : due,
+        start_at: null,
+        estimated_minutes: null,
+        commercial_value: null,
+        dependency: null,
+        blocker: null,
+        waiting_for_person: waitingForPerson,
+        follow_up_at: status === 'waiting_on_someone' ? due : null,
+        related_email: null,
+        related_meeting: null,
+        related_opportunity: null,
+        completion_record: null,
+        agent_notes: 'Captured locally. Convert it into a project if it becomes bigger than one action.',
+        user_notes: null,
+        prepared_output: null,
+        last_event_at: now,
+        created_at: now,
+        updated_at: now,
+      };
+      setTasks((current) => [task, ...current]);
+      await createActivity(workspaceId, task.id, 'quick_capture_created', `Captured: ${text}`, { raw: text });
+      setQuickCapture('');
+      return;
+    }
+    if (!supabase) return;
     const { data, error } = await supabase
       .from('work_os_tasks')
       .insert({
@@ -481,8 +686,25 @@ export default function WorkOS() {
   }
 
   async function createPreparedWork(task: WorkTask) {
-    if (!supabase || !workspaceId) return;
+    if (!workspaceId) return;
     const body = `Subject: Next step on ${task.title}\n\nHi,\n\nFollowing up on this. The useful next step is:\n\n${task.description || task.title}\n\nWould you be open to a short call or a quick reply so we can decide whether to move this forward?\n\nBest,\nYour name`;
+    if (localMode) {
+      const item: PreparedWork = {
+        id: newId('prepared'),
+        workspace_id: workspaceId,
+        task_id: task.id,
+        kind: 'action_draft',
+        title: `Draft for ${task.title}`,
+        body,
+        status: 'prepared',
+        created_at: new Date().toISOString(),
+      };
+      setPrepared((current) => [item, ...current]);
+      await patchTask(task, { status: 'prepared_by_sayok', prepared_output: body }, 'prepared_work_created', `SayOK prepared a draft for "${task.title}".`, { prepared_work_id: item.id }, 'sayok');
+      setView('prepared');
+      return;
+    }
+    if (!supabase) return;
     const { data, error } = await supabase
       .from('work_os_prepared_work')
       .insert({
@@ -503,7 +725,22 @@ export default function WorkOS() {
   }
 
   async function createProject(name: string, businessArea?: string, clientCompany?: string) {
-    if (!supabase || !workspaceId || !name.trim()) return;
+    if (!workspaceId || !name.trim()) return;
+    if (localMode) {
+      const project: Project = {
+        id: newId('project'),
+        workspace_id: workspaceId,
+        name: name.trim(),
+        business_area: businessArea?.trim() || null,
+        client_company: clientCompany?.trim() || null,
+        status: 'active',
+        notes: null,
+      };
+      setProjects((current) => [project, ...current]);
+      await createActivity(workspaceId, null, 'project_created', `Created project ${project.name}.`, { project_id: project.id });
+      return;
+    }
+    if (!supabase) return;
     const { data, error } = await supabase
       .from('work_os_projects')
       .insert({
@@ -524,7 +761,22 @@ export default function WorkOS() {
   }
 
   async function convertTaskToProject(task: WorkTask) {
-    if (!supabase || !workspaceId) return;
+    if (!workspaceId) return;
+    if (localMode) {
+      const project: Project = {
+        id: newId('project'),
+        workspace_id: workspaceId,
+        name: task.title,
+        business_area: null,
+        client_company: task.client_company,
+        status: 'active',
+        notes: task.description,
+      };
+      setProjects((current) => [project, ...current]);
+      await patchTask(task, { project_id: project.id, status: 'in_progress' }, 'task_converted_to_project', `Converted "${task.title}" into a project.`, { project_id: project.id });
+      return;
+    }
+    if (!supabase) return;
     const { data, error } = await supabase
       .from('work_os_projects')
       .insert({
@@ -586,22 +838,24 @@ export default function WorkOS() {
     return <FullScreenMessage title="Loading SayOK" body="Checking your private session." />;
   }
 
-  if (!supabase) {
-    return <FullScreenMessage title="Supabase is not configured" body="Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY before using private workspaces." />;
-  }
-
-  if (!user) {
+  if (!user && !localMode) {
     return (
       <main className="min-h-screen bg-[#f7f4ee] px-4 py-10 text-slate-950">
         <section className="mx-auto max-w-xl rounded-3xl border border-stone-200 bg-white p-8 shadow-sm">
           <p className="text-xs font-black uppercase tracking-[0.18em] text-orange-700">Private AI work OS</p>
-          <h1 className="mt-4 text-4xl font-black tracking-tight">SayOK starts in your private workspace.</h1>
+          <h1 className="mt-4 text-4xl font-black tracking-tight">SayOK starts in a private workspace.</h1>
           <p className="mt-4 text-sm font-semibold leading-6 text-slate-600">
-            Your agent organizes projects, tasks, approvals, prepared work, and activity history after login. Public routes never show private company data or demo customer information.
+            Organize projects, tasks, approvals, prepared work, and activity history without exposing company data on a public page.
           </p>
-          <button disabled={busy} onClick={signInWithGoogle} className="mt-6 w-full rounded-2xl bg-slate-950 px-5 py-4 text-sm font-black text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50">
+          <button onClick={startLocalWorkspace} className="mt-6 w-full rounded-2xl bg-orange-500 px-5 py-4 text-sm font-black text-white hover:bg-orange-600">
+            Start private workspace in this browser
+          </button>
+          <button disabled={busy} onClick={signInWithGoogle} className="mt-3 w-full rounded-2xl border border-stone-200 bg-white px-5 py-4 text-sm font-black text-slate-950 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-50">
             {busy ? 'Checking login...' : 'Continue with Google'}
           </button>
+          <p className="mt-4 text-xs font-bold leading-5 text-slate-500">
+            Browser workspace data stays in this browser only. Google login will sync workspaces after Supabase OAuth is repaired.
+          </p>
           {message && <p className="mt-4 rounded-2xl bg-red-50 px-4 py-3 text-sm font-bold leading-6 text-red-700">{message}</p>}
         </section>
       </main>
@@ -644,7 +898,7 @@ export default function WorkOS() {
               ))}
             </select>
             <button onClick={signOut} className="rounded-full border border-stone-200 bg-white px-3 py-2 text-xs font-black text-slate-600 hover:bg-stone-50">
-              <LogOut className="inline h-4 w-4" /> Logout
+              <LogOut className="inline h-4 w-4" /> {localMode ? 'Exit local' : 'Logout'}
             </button>
           </div>
         </div>
@@ -707,7 +961,7 @@ export default function WorkOS() {
           {view === 'clients' && <ClientsView tasks={tasks} projects={projects} />}
           {view === 'search' && <SearchView query={searchQuery} setQuery={setSearchQuery} tasks={filteredTasks} activity={activity} />}
           {view === 'activity' && <ActivityView activity={activity} />}
-          {view === 'settings' && <SettingsView workspace={activeWorkspace} user={user} />}
+          {view === 'settings' && <SettingsView workspace={activeWorkspace} user={user} localMode={localMode} />}
         </section>
       </div>
 
@@ -1035,14 +1289,21 @@ function ActivityList({ activity }: { activity: Activity[] }) {
   return <div className="mt-4 space-y-2">{activity.map((event) => <div key={event.id} className="rounded-2xl bg-stone-50 px-4 py-3"><p className="text-sm font-black">{event.summary}</p><p className="mt-1 text-xs font-bold text-slate-500">{event.event_type} · {formatDateTime(event.created_at)}</p></div>)}</div>;
 }
 
-function SettingsView({ workspace, user }: { workspace: Workspace; user: User }) {
+function SettingsView({ workspace, user, localMode }: { workspace: Workspace; user: User | null; localMode: boolean }) {
   return (
     <Panel>
       <SectionTitle title="Settings" subtitle="Workspace security and integrations." />
       <div className="mt-4 grid gap-3">
-        <Info label="Signed in as" value={user.email || user.id} />
+        <Info label="Signed in as" value={localMode ? 'Private browser workspace' : user?.email || user?.id || 'Unknown'} />
         <Info label="Workspace" value={workspace.name} />
-        <Info label="Data isolation" value="Every query is scoped by Supabase RLS membership policies." />
+        <Info
+          label="Data isolation"
+          value={
+            localMode
+              ? 'Stored only in this browser localStorage. Nothing is synced or shown publicly.'
+              : 'Every query is scoped by Supabase RLS membership policies.'
+          }
+        />
         <Info label="Gmail" value="Not connected in this build. Manual capture and external completion keep state current." />
         <Info label="Google Calendar" value="Not connected in this build. Calendar sync job is the next integration step." />
       </div>
