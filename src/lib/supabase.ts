@@ -26,12 +26,13 @@ function isLocalhost(hostname: string): boolean {
   return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '0.0.0.0';
 }
 
-/** Prefer the configured public site URL for OAuth so apex/www mismatches do not break sign-in. */
+/** Prefer the current public origin for OAuth so backup domains can complete login. */
 export function getPublicSiteUrl(): string {
   if (typeof window === 'undefined') return publicSiteUrl;
 
   const currentUrl = new URL(window.location.origin);
   if (isLocalhost(currentUrl.hostname)) return currentUrl.origin;
+  if (!currentUrl.hostname.endsWith('.vercel.app')) return currentUrl.origin;
 
   try {
     const configuredUrl = new URL(publicSiteUrl);
