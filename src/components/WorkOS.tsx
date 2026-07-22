@@ -18,7 +18,7 @@ import {
   UserRoundCheck,
   XCircle,
 } from 'lucide-react';
-import { getAuthCallbackUrl, supabase } from '@/lib/supabase';
+import { checkAuthHealth, getAuthCallbackUrl, supabase } from '@/lib/supabase';
 
 type WorkStatus =
   | 'inbox'
@@ -285,13 +285,25 @@ export default function WorkOS() {
 
   async function signInWithGoogle() {
     if (!supabase) return;
-    await supabase.auth.signInWithOAuth({
+    setBusy(true);
+    setMessage(null);
+    const authReady = await checkAuthHealth();
+    if (!authReady) {
+      setBusy(false);
+      setMessage('Google login is not available because the Supabase Auth URL is not reachable. Fix NEXT_PUBLIC_SUPABASE_URL in Vercel, then redeploy.');
+      return;
+    }
+    const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
         redirectTo: getAuthCallbackUrl('/'),
         scopes: 'email profile',
       },
     });
+    if (error) {
+      setBusy(false);
+      setMessage(`Google login failed: ${error.message}`);
+    }
   }
 
   async function signOut() {
@@ -587,9 +599,10 @@ export default function WorkOS() {
           <p className="mt-4 text-sm font-semibold leading-6 text-slate-600">
             Your agent organizes projects, tasks, approvals, prepared work, and activity history after login. Public routes never show private company data or demo customer information.
           </p>
-          <button onClick={signInWithGoogle} className="mt-6 w-full rounded-2xl bg-slate-950 px-5 py-4 text-sm font-black text-white hover:bg-slate-800">
-            Continue with Google
+          <button disabled={busy} onClick={signInWithGoogle} className="mt-6 w-full rounded-2xl bg-slate-950 px-5 py-4 text-sm font-black text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50">
+            {busy ? 'Checking login...' : 'Continue with Google'}
           </button>
+          {message && <p className="mt-4 rounded-2xl bg-red-50 px-4 py-3 text-sm font-bold leading-6 text-red-700">{message}</p>}
         </section>
       </main>
     );
