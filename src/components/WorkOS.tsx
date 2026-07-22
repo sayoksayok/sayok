@@ -136,6 +136,20 @@ type GoogleStatus = {
   role: 'owner' | 'admin' | 'member';
 };
 
+type WorkOsConfig = {
+  supabase: {
+    configured: boolean;
+    reachable: boolean;
+    status: number | null;
+    error: string | null;
+    host: string | null;
+  };
+  googleIntegration: {
+    configured: boolean;
+  };
+  missing: string[];
+};
+
 const terminalStatuses: WorkStatus[] = ['done', 'cancelled', 'not_relevant', 'archived'];
 const activeStatuses: WorkStatus[] = ['inbox', 'needs_clarification', 'ready', 'in_progress', 'prepared_by_sayok', 'needs_user_approval', 'scheduled', 'blocked'];
 const navItems: { id: View; label: string }[] = [
@@ -241,6 +255,7 @@ export default function WorkOS() {
   const [busy, setBusy] = useState(false);
   const [integrationBusy, setIntegrationBusy] = useState(false);
   const [googleStatus, setGoogleStatus] = useState<GoogleStatus | null>(null);
+  const [workOsConfig, setWorkOsConfig] = useState<WorkOsConfig | null>(null);
   const [alreadyDoneTask, setAlreadyDoneTask] = useState<WorkTask | null>(null);
   const [alreadyDoneText, setAlreadyDoneText] = useState('');
   const [alreadyDoneChannel, setAlreadyDoneChannel] = useState('');
@@ -272,6 +287,13 @@ export default function WorkOS() {
     });
 
     return () => listener.subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    fetch('/api/work-os/config', { cache: 'no-store' })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((config) => setWorkOsConfig(config as WorkOsConfig | null))
+      .catch(() => setWorkOsConfig(null));
   }, []);
 
   useEffect(() => {
@@ -455,6 +477,15 @@ export default function WorkOS() {
     if (!supabase) return;
     setBusy(true);
     setMessage(null);
+    const config = await fetch('/api/work-os/config', { cache: 'no-store' })
+      .then((response) => (response.ok ? response.json() : null))
+      .catch(() => null) as WorkOsConfig | null;
+    if (config) setWorkOsConfig(config);
+    if (config && !config.supabase.reachable) {
+      setBusy(false);
+      setMessage(`Google login is blocked because Supabase Auth is unreachable (${config.supabase.host || 'missing host'}). Fix NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY in Vercel and redeploy.`);
+      return;
+    }
     const authReady = await checkAuthHealth();
     if (!authReady) {
       setBusy(false);
@@ -816,6 +847,7 @@ export default function WorkOS() {
               Continue with email
             </button>
           </div>
+          <ConfigStatus config={workOsConfig} />
           {message && <p className="mt-4 rounded-2xl bg-red-50 px-4 py-3 text-sm font-bold leading-6 text-red-700">{message}</p>}
         </section>
       </main>
@@ -942,6 +974,46 @@ export default function WorkOS() {
         />
       )}
     </main>
+  );
+}
+
+function ConfigStatus({ config }: { config: WorkOsConfig | null }) {
+  if (!config) {
+    return (
+      <div className="mt-4 rounded-2xl bg-stone-50 px-4 py-3 text-xs font-bold leading-5 text-slate-600">
+        Checking authentication configuration...
+      </div>
+    );
+  }
+
+  if (config.supabase.reachable && config.googleIntegration.configured) {
+    return (
+      <div className="mt-4 rounded-2xl bg-emerald-50 px-4 py-3 text-xs font-black uppercase tracking-[0.12em] text-emerald-700">
+        Auth and Google integration configuration detected
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-4 rounded-2xl bg-red-50 px-4 py-3 text-sm font-bold leading-6 text-red-700">
+      <p>Authentication is not ready for production.</p>
+      {!config.supabase.reachable && (
+        <p className="mt-2">
+          Supabase Auth is unreachable{config.supabase.host ? ` (${config.supabase.host})` : ''}.
+        </p>
+      )}
+      {!config.googleIntegration.configured && (
+        <p className="mt-2">Google Gmail/Calendar backend env is missing.</p>
+      )}
+      {config.missing.length > 0 && (
+        <p className="mt-2 text-xs leading-5">
+          Missing or invalid env: {config.missing.join(', ')}
+        </p>
+      )}
+      <p className="mt-2 text-xs leading-5">
+        No private workspace data is loaded until authentication is connected.
+      </p>
+    </div>
   );
 }
 

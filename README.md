@@ -125,6 +125,14 @@ STRIPE_WEBHOOK_SECRET=
 
 Without valid Supabase and Google OAuth configuration, the app must be treated as a development build. It should not be presented as a production-ready connected agent.
 
+Runtime config check:
+
+```bash
+curl https://sayok.kakehashi.tech/api/work-os/config
+```
+
+This endpoint returns boolean setup status only. It never returns API keys, OAuth tokens, or service-role secrets. If `supabase.reachable` is false, fix `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` in Vercel and redeploy before testing login.
+
 ## Database
 
 Existing tables from the previous app:
