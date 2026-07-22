@@ -29,7 +29,7 @@ Implemented screens:
 - `Capture`: paste meeting notes, email text, chat notes, LinkedIn notes, or random context and extract structured relationship data.
 - `Action workspace`: draft a follow-up, mark actions done, schedule next follow-up, or pause weak opportunities.
 
-The MVP uses localStorage for a reliable manual workflow and realistic demo data. Supabase tables are included for persistence when auth-backed storage is wired in.
+The MVP now requires Supabase Auth and database persistence. Browser localStorage is not used as the source of truth for workspace, task, project, activity, or prepared-work state.
 
 ## Product Architecture
 
@@ -65,7 +65,8 @@ New MVP surfaces:
 - React 19
 - TypeScript
 - Tailwind CSS
-- Supabase Auth and database foundation
+- Supabase Auth and database persistence
+- Google OAuth for Gmail and Calendar scopes
 - Anthropic API foundation from the previous app
 - Stripe subscription foundation from the previous app
 
@@ -88,12 +89,29 @@ Required for AI-backed routes from the previous product:
 ANTHROPIC_API_KEY=
 ```
 
-Required for login and future persisted relationship workspace:
+Required for login and persisted Work OS data:
 
 ```env
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
+```
+
+Required for Gmail and Google Calendar integration:
+
+```env
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+GOOGLE_TOKEN_ENCRYPTION_KEY=
+```
+
+Supabase Google OAuth must request these scopes:
+
+```text
+email profile
+https://www.googleapis.com/auth/gmail.readonly
+https://www.googleapis.com/auth/gmail.compose
+https://www.googleapis.com/auth/calendar.readonly
 ```
 
 Required only for subscription pages:
@@ -105,7 +123,7 @@ STRIPE_PRICE_YEARLY=
 STRIPE_WEBHOOK_SECRET=
 ```
 
-The relationship OS MVP can be evaluated without external integrations because it runs from demo data and localStorage.
+Without valid Supabase and Google OAuth configuration, the app must be treated as a development build. It should not be presented as a production-ready connected agent.
 
 ## Database
 
@@ -133,7 +151,13 @@ Current private Work OS foundation migration:
 supabase/migrations/20260720161000_work_os_foundation.sql
 ```
 
-Run this migration in Supabase before using the new app. The normal app no longer renders demo work on public routes; users must sign in and create a private workspace.
+Google integration migration:
+
+```text
+supabase/migrations/20260722133000_work_os_google_integrations.sql
+```
+
+Run these migrations in Supabase before using the new app. The normal app no longer renders demo work on public routes; users must sign in and create a private workspace.
 
 Current Work OS tables:
 
@@ -143,6 +167,19 @@ Current Work OS tables:
 - `work_os_tasks`
 - `work_os_activity_events`
 - `work_os_prepared_work`
+- `work_os_user_profiles`
+- `work_os_google_connections`
+- `work_os_sync_runs`
+- `work_os_external_messages`
+- `work_os_calendar_events`
+
+Tenant isolation test:
+
+```bash
+npm run test:tenant-isolation
+```
+
+This creates two confirmed test users, creates a workspace for User A, verifies User A can read their task, verifies User B cannot read or write Workspace A data, then cleans up. It requires a real Supabase project and service role key.
 
 Core state query:
 

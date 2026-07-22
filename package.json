@@ -7,6 +7,7 @@
     "build": "next build",
     "deploy:escrow:mantle-sepolia": "node scripts/deploy-mantle-sepolia.mjs",
     "deploy:mock-token:mantle-sepolia": "node scripts/deploy-mock-token-mantle-sepolia.mjs",
+    "test:tenant-isolation": "node scripts/test-work-os-tenant-isolation.mjs",
     "start": "next start",
     "lint": "eslint"
   },

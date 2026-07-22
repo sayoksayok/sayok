@@ -111,6 +111,31 @@ type PreparedWork = {
   created_at: string;
 };
 
+type GoogleStatus = {
+  connection: {
+    google_email: string | null;
+    scopes: string[];
+    gmail_connected: boolean;
+    calendar_connected: boolean;
+    status: string;
+    last_sync_at: string | null;
+    last_error: string | null;
+    connected_at: string | null;
+    disconnected_at: string | null;
+  } | null;
+  lastRun: {
+    status: string;
+    gmail_threads_seen: number;
+    calendar_events_seen: number;
+    tasks_created: number;
+    drafts_created: number;
+    error: string | null;
+    started_at: string;
+    finished_at: string | null;
+  } | null;
+  role: 'owner' | 'admin' | 'member';
+};
+
 const terminalStatuses: WorkStatus[] = ['done', 'cancelled', 'not_relevant', 'archived'];
 const activeStatuses: WorkStatus[] = ['inbox', 'needs_clarification', 'ready', 'in_progress', 'prepared_by_sayok', 'needs_user_approval', 'scheduled', 'blocked'];
 const navItems: { id: View; label: string }[] = [
@@ -211,8 +236,11 @@ export default function WorkOS() {
   const [quickCapture, setQuickCapture] = useState('');
   const [workspaceName, setWorkspaceName] = useState('');
   const [companyName, setCompanyName] = useState('');
+  const [emailInput, setEmailInput] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [integrationBusy, setIntegrationBusy] = useState(false);
+  const [googleStatus, setGoogleStatus] = useState<GoogleStatus | null>(null);
   const [alreadyDoneTask, setAlreadyDoneTask] = useState<WorkTask | null>(null);
   const [alreadyDoneText, setAlreadyDoneText] = useState('');
   const [alreadyDoneChannel, setAlreadyDoneChannel] = useState('');
@@ -228,10 +256,16 @@ export default function WorkOS() {
       return;
     }
 
-    supabase.auth.getUser().then(({ data }) => {
-      setUser(data.user);
-      setAuthLoading(false);
-    });
+    supabase.auth
+      .getUser()
+      .then(({ data }) => {
+        setUser(data.user);
+        setAuthLoading(false);
+      })
+      .catch(() => {
+        setMessage('Development build — authentication backend is not reachable.');
+        setAuthLoading(false);
+      });
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user || null);
@@ -252,6 +286,21 @@ export default function WorkOS() {
   useEffect(() => {
     if (workspaceId) void loadWorkspaceData(workspaceId);
   }, [workspaceId]);
+
+  useEffect(() => {
+    if (user && workspaceId) {
+      void persistGoogleConnection(workspaceId);
+      void loadGoogleStatus(workspaceId);
+    }
+  }, [user, workspaceId]);
+
+  async function authHeaders() {
+    if (!supabase) return null;
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) return null;
+    return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+  }
 
   async function loadWorkspaces() {
     if (!supabase || !user) return;
@@ -283,6 +332,125 @@ export default function WorkOS() {
     setPrepared((preparedRes.data || []) as PreparedWork[]);
   }
 
+  async function persistGoogleConnection(id: string) {
+    if (!supabase) return;
+    const { data } = await supabase.auth.getSession();
+    const session = data.session;
+    const providerToken = session?.provider_token;
+    if (!session?.access_token || !providerToken) return;
+    const expiresAt = session.expires_at ? new Date(session.expires_at * 1000).toISOString() : undefined;
+    await fetch('/api/work-os/google/connect', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        workspaceId: id,
+        accessToken: providerToken,
+        refreshToken: session.provider_refresh_token,
+        expiresAt,
+        scopes: (session.user.app_metadata?.provider === 'google' ? session.user.app_metadata?.scopes : null) || [
+          'email',
+          'profile',
+          'https://www.googleapis.com/auth/gmail.readonly',
+          'https://www.googleapis.com/auth/gmail.compose',
+          'https://www.googleapis.com/auth/calendar.readonly',
+        ],
+        googleEmail: session.user.email,
+      }),
+    }).catch(() => null);
+  }
+
+  async function loadGoogleStatus(id: string) {
+    const headers = await authHeaders();
+    if (!headers) return;
+    const response = await fetch(`/api/work-os/google/status?workspaceId=${encodeURIComponent(id)}`, { headers });
+    if (!response.ok) return;
+    setGoogleStatus((await response.json()) as GoogleStatus);
+  }
+
+  async function runGoogleSync() {
+    if (!workspaceId) return;
+    const headers = await authHeaders();
+    if (!headers) return;
+    setIntegrationBusy(true);
+    setMessage(null);
+    const response = await fetch('/api/work-os/sync', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ workspaceId }),
+    });
+    const data = await response.json().catch(() => null);
+    setIntegrationBusy(false);
+    if (!response.ok) {
+      setMessage(data?.error || 'Google sync failed');
+      await loadGoogleStatus(workspaceId);
+      return;
+    }
+    setMessage(`Synced ${data.gmailSeen} Gmail threads and ${data.calendarSeen} Calendar events. Created ${data.tasksCreated} tasks.`);
+    await loadWorkspaceData(workspaceId);
+    await loadGoogleStatus(workspaceId);
+  }
+
+  async function disconnectGoogle() {
+    if (!workspaceId) return;
+    const confirmed = window.confirm('Disconnect Gmail and Calendar access for this workspace?');
+    if (!confirmed) return;
+    const headers = await authHeaders();
+    if (!headers) return;
+    setIntegrationBusy(true);
+    const response = await fetch('/api/work-os/google/disconnect', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ workspaceId }),
+    });
+    setIntegrationBusy(false);
+    if (!response.ok) {
+      const data = await response.json().catch(() => null);
+      setMessage(data?.error || 'Could not disconnect Google');
+      return;
+    }
+    await loadGoogleStatus(workspaceId);
+  }
+
+  async function deleteWorkspace() {
+    if (!workspaceId) return;
+    const confirmed = window.confirm('Delete this workspace and all stored business data? This cannot be undone.');
+    if (!confirmed) return;
+    const headers = await authHeaders();
+    if (!headers) return;
+    const response = await fetch('/api/work-os/workspace/delete', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ workspaceId }),
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => null);
+      setMessage(data?.error || 'Could not delete workspace');
+      return;
+    }
+    setWorkspaceId(null);
+    setProjects([]);
+    setTasks([]);
+    setActivity([]);
+    setPrepared([]);
+    await loadWorkspaces();
+  }
+
+  async function signInWithEmail() {
+    if (!supabase || !emailInput.trim()) return;
+    setBusy(true);
+    setMessage(null);
+    const { error } = await supabase.auth.signInWithOtp({
+      email: emailInput.trim(),
+      options: { emailRedirectTo: getAuthCallbackUrl('/') },
+    });
+    setBusy(false);
+    if (error) {
+      setMessage(`Email login failed: ${error.message}`);
+      return;
+    }
+    setMessage('Check your email for the login link.');
+  }
+
   async function signInWithGoogle() {
     if (!supabase) return;
     setBusy(true);
@@ -297,7 +465,11 @@ export default function WorkOS() {
       provider: 'google',
       options: {
         redirectTo: getAuthCallbackUrl('/'),
-        scopes: 'email profile',
+        scopes: 'email profile https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.compose https://www.googleapis.com/auth/calendar.readonly',
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent',
+        },
       },
     });
     if (error) {
@@ -502,6 +674,35 @@ export default function WorkOS() {
     setView('prepared');
   }
 
+  async function createGmailDraftFromPrepared(item: PreparedWork, to: string) {
+    if (!workspaceId || !to.trim()) return;
+    const headers = await authHeaders();
+    if (!headers) return;
+    const subject = item.body.match(/^Subject:\s*(.+)$/m)?.[1] || item.title;
+    const draftBody = item.body.replace(/^Subject:\s*.+\n\n?/m, '').trim();
+    setIntegrationBusy(true);
+    const response = await fetch('/api/work-os/gmail-draft', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        workspaceId,
+        taskId: item.task_id,
+        to: to.trim(),
+        subject,
+        body: draftBody,
+      }),
+    });
+    const data = await response.json().catch(() => null);
+    setIntegrationBusy(false);
+    if (!response.ok) {
+      setMessage(data?.error || 'Could not create Gmail draft');
+      return;
+    }
+    setMessage(`Created Gmail draft for ${to.trim()}. It was not sent.`);
+    await loadWorkspaceData(workspaceId);
+    await loadGoogleStatus(workspaceId);
+  }
+
   async function createProject(name: string, businessArea?: string, clientCompany?: string) {
     if (!supabase || !workspaceId || !name.trim()) return;
     const { data, error } = await supabase
@@ -594,6 +795,7 @@ export default function WorkOS() {
     return (
       <main className="min-h-screen bg-[#f7f4ee] px-4 py-10 text-slate-950">
         <section className="mx-auto max-w-xl rounded-3xl border border-stone-200 bg-white p-8 shadow-sm">
+          <p className="rounded-2xl bg-amber-50 px-4 py-3 text-xs font-black uppercase tracking-[0.12em] text-amber-800">Development build — authentication and integrations incomplete.</p>
           <p className="text-xs font-black uppercase tracking-[0.18em] text-orange-700">Private AI work OS</p>
           <h1 className="mt-4 text-4xl font-black tracking-tight">SayOK starts in your private workspace.</h1>
           <p className="mt-4 text-sm font-semibold leading-6 text-slate-600">
@@ -602,6 +804,18 @@ export default function WorkOS() {
           <button disabled={busy} onClick={signInWithGoogle} className="mt-6 w-full rounded-2xl bg-slate-950 px-5 py-4 text-sm font-black text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50">
             {busy ? 'Checking login...' : 'Continue with Google'}
           </button>
+          <div className="mt-3 grid gap-2">
+            <input
+              value={emailInput}
+              onChange={(event) => setEmailInput(event.target.value)}
+              placeholder="Email address"
+              type="email"
+              className="rounded-2xl border border-stone-200 px-4 py-3 text-sm font-bold outline-none focus:border-orange-400"
+            />
+            <button disabled={busy || !emailInput.trim()} onClick={signInWithEmail} className="w-full rounded-2xl border border-stone-200 bg-white px-5 py-4 text-sm font-black text-slate-950 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-50">
+              Continue with email
+            </button>
+          </div>
           {message && <p className="mt-4 rounded-2xl bg-red-50 px-4 py-3 text-sm font-bold leading-6 text-red-700">{message}</p>}
         </section>
       </main>
@@ -652,6 +866,7 @@ export default function WorkOS() {
 
       <section className="border-b border-stone-200 bg-[#fffaf0]">
         <div className="mx-auto max-w-7xl px-4 py-3">
+          <p className="mb-3 rounded-2xl bg-amber-50 px-4 py-3 text-xs font-black uppercase tracking-[0.12em] text-amber-800">Development build — authentication and integrations incomplete.</p>
           <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
             <textarea
               value={quickCapture}
@@ -701,13 +916,13 @@ export default function WorkOS() {
           {view === 'inbox' && <TaskList title="Inbox" tasks={tasks.filter((task) => task.status === 'inbox' || task.status === 'needs_clarification')} onPatch={patchTask} onPrepare={createPreparedWork} onAlreadyDone={setAlreadyDoneTask} onDelete={deleteTask} onConvert={convertTaskToProject} onMerge={mergeDuplicateTask} />}
           {view === 'tasks' && <TaskList title="All active work" tasks={activeTasks} onPatch={patchTask} onPrepare={createPreparedWork} onAlreadyDone={setAlreadyDoneTask} onDelete={deleteTask} onConvert={convertTaskToProject} onMerge={mergeDuplicateTask} />}
           {view === 'waiting' && <TaskList title="Waiting on others" tasks={waitingTasks} onPatch={patchTask} onPrepare={createPreparedWork} onAlreadyDone={setAlreadyDoneTask} onDelete={deleteTask} onConvert={convertTaskToProject} onMerge={mergeDuplicateTask} />}
-          {view === 'prepared' && <PreparedView items={prepared} tasks={tasks} onPatchTask={patchTask} reload={() => workspaceId && loadWorkspaceData(workspaceId)} />}
+          {view === 'prepared' && <PreparedView items={prepared} tasks={tasks} onPatchTask={patchTask} onCreateGmailDraft={createGmailDraftFromPrepared} reload={() => workspaceId && loadWorkspaceData(workspaceId)} />}
           {view === 'projects' && <ProjectsView projects={projects} tasks={tasks} onCreate={createProject} />}
-          {view === 'calendar' && <Placeholder title="Calendar" body="Google Calendar sync is not connected yet. Calendar will become a real input after OAuth token storage and sync jobs are wired." />}
+          {view === 'calendar' && <CalendarStatusView googleStatus={googleStatus} onSync={runGoogleSync} busy={integrationBusy} />}
           {view === 'clients' && <ClientsView tasks={tasks} projects={projects} />}
           {view === 'search' && <SearchView query={searchQuery} setQuery={setSearchQuery} tasks={filteredTasks} activity={activity} />}
           {view === 'activity' && <ActivityView activity={activity} />}
-          {view === 'settings' && <SettingsView workspace={activeWorkspace} user={user} />}
+          {view === 'settings' && <SettingsView workspace={activeWorkspace} user={user} googleStatus={googleStatus} busy={integrationBusy} onSync={runGoogleSync} onDisconnectGoogle={disconnectGoogle} onDeleteWorkspace={deleteWorkspace} />}
         </section>
       </div>
 
@@ -925,7 +1140,19 @@ function AlreadyDoneModal({
   );
 }
 
-function PreparedView({ items, tasks, onPatchTask, reload }: { items: PreparedWork[]; tasks: WorkTask[]; onPatchTask: (task: WorkTask, patch: Partial<WorkTask>, eventType: string, summary: string, payload?: Record<string, unknown>) => Promise<void>; reload: () => void }) {
+function PreparedView({
+  items,
+  tasks,
+  onPatchTask,
+  onCreateGmailDraft,
+  reload,
+}: {
+  items: PreparedWork[];
+  tasks: WorkTask[];
+  onPatchTask: (task: WorkTask, patch: Partial<WorkTask>, eventType: string, summary: string, payload?: Record<string, unknown>) => Promise<void>;
+  onCreateGmailDraft: (item: PreparedWork, to: string) => Promise<void>;
+  reload: () => void;
+}) {
   return (
     <Panel>
       <SectionTitle title="Prepared work" subtitle="Actual outputs created by SayOK." />
@@ -933,23 +1160,46 @@ function PreparedView({ items, tasks, onPatchTask, reload }: { items: PreparedWo
         <div className="mt-4 space-y-4">
           {items.map((item) => {
             const task = tasks.find((row) => row.id === item.task_id);
-            return (
-              <article key={item.id} className="rounded-3xl border border-stone-200 p-4">
-                <p className="text-xs font-black uppercase tracking-[0.14em] text-orange-700">{item.kind}</p>
-                <h3 className="mt-1 text-xl font-black">{item.title}</h3>
-                <pre className="mt-3 whitespace-pre-wrap rounded-2xl bg-stone-50 p-4 text-sm font-semibold leading-6 text-slate-700">{item.body}</pre>
-                {task && (
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <SmallButton icon={<ShieldCheck />} label="Approve prepared work" onClick={async () => { await onPatchTask(task, { status: 'needs_user_approval' }, 'prepared_work_ready_for_approval', `Prepared work for "${task.title}" is ready for approval.`); reload(); }} />
-                    <SmallButton icon={<CheckCircle2 />} label="Mark used" onClick={async () => { await onPatchTask(task, { status: 'done', completion_record: { used_prepared_work: item.id, completed_at: new Date().toISOString() } }, 'prepared_work_used', `Used prepared work for "${task.title}".`); reload(); }} />
-                  </div>
-                )}
-              </article>
-            );
+            return <PreparedCard key={item.id} item={item} task={task} onPatchTask={onPatchTask} onCreateGmailDraft={onCreateGmailDraft} reload={reload} />;
           })}
         </div>
       )}
     </Panel>
+  );
+}
+
+function PreparedCard({
+  item,
+  task,
+  onPatchTask,
+  onCreateGmailDraft,
+  reload,
+}: {
+  item: PreparedWork;
+  task?: WorkTask;
+  onPatchTask: (task: WorkTask, patch: Partial<WorkTask>, eventType: string, summary: string, payload?: Record<string, unknown>) => Promise<void>;
+  onCreateGmailDraft: (item: PreparedWork, to: string) => Promise<void>;
+  reload: () => void;
+}) {
+  const [to, setTo] = useState('');
+  return (
+    <article className="rounded-3xl border border-stone-200 p-4">
+      <p className="text-xs font-black uppercase tracking-[0.14em] text-orange-700">{item.kind}</p>
+      <h3 className="mt-1 text-xl font-black">{item.title}</h3>
+      <pre className="mt-3 whitespace-pre-wrap rounded-2xl bg-stone-50 p-4 text-sm font-semibold leading-6 text-slate-700">{item.body}</pre>
+      <div className="mt-3 grid gap-2 rounded-2xl border border-stone-200 bg-white p-3 md:grid-cols-[1fr_auto]">
+        <input value={to} onChange={(event) => setTo(event.target.value)} placeholder="Recipient email for Gmail draft" className="rounded-xl border border-stone-200 px-3 py-2 text-sm font-bold outline-none focus:border-orange-400" />
+        <button disabled={!to.trim()} onClick={() => onCreateGmailDraft(item, to)} className="rounded-xl bg-orange-500 px-4 py-2 text-sm font-black text-white disabled:opacity-40">
+          Create Gmail draft
+        </button>
+      </div>
+      {task && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          <SmallButton icon={<ShieldCheck />} label="Approve prepared work" onClick={async () => { await onPatchTask(task, { status: 'needs_user_approval' }, 'prepared_work_ready_for_approval', `Prepared work for "${task.title}" is ready for approval.`); reload(); }} />
+          <SmallButton icon={<CheckCircle2 />} label="Mark used" onClick={async () => { await onPatchTask(task, { status: 'done', completion_record: { used_prepared_work: item.id, completed_at: new Date().toISOString() } }, 'prepared_work_used', `Used prepared work for "${task.title}".`); reload(); }} />
+        </div>
+      )}
+    </article>
   );
 }
 
@@ -1035,16 +1285,71 @@ function ActivityList({ activity }: { activity: Activity[] }) {
   return <div className="mt-4 space-y-2">{activity.map((event) => <div key={event.id} className="rounded-2xl bg-stone-50 px-4 py-3"><p className="text-sm font-black">{event.summary}</p><p className="mt-1 text-xs font-bold text-slate-500">{event.event_type} · {formatDateTime(event.created_at)}</p></div>)}</div>;
 }
 
-function SettingsView({ workspace, user }: { workspace: Workspace; user: User }) {
+function CalendarStatusView({ googleStatus, onSync, busy }: { googleStatus: GoogleStatus | null; onSync: () => Promise<void>; busy: boolean }) {
+  return (
+    <Panel>
+      <SectionTitle title="Calendar" subtitle="Upcoming and recent events are read from Google Calendar after connection." />
+      <div className="mt-4 grid gap-3">
+        <Info label="Calendar status" value={googleStatus?.connection?.calendar_connected ? 'Connected' : 'Not connected'} />
+        <Info label="Last sync" value={googleStatus?.connection?.last_sync_at ? formatDateTime(googleStatus.connection.last_sync_at) : 'No successful sync yet'} />
+        <button disabled={busy || !googleStatus?.connection?.calendar_connected} onClick={onSync} className="rounded-2xl bg-orange-500 px-4 py-3 text-sm font-black text-white disabled:opacity-40">
+          {busy ? 'Syncing...' : 'Sync Gmail and Calendar'}
+        </button>
+      </div>
+    </Panel>
+  );
+}
+
+function SettingsView({
+  workspace,
+  user,
+  googleStatus,
+  busy,
+  onSync,
+  onDisconnectGoogle,
+  onDeleteWorkspace,
+}: {
+  workspace: Workspace;
+  user: User;
+  googleStatus: GoogleStatus | null;
+  busy: boolean;
+  onSync: () => Promise<void>;
+  onDisconnectGoogle: () => Promise<void>;
+  onDeleteWorkspace: () => Promise<void>;
+}) {
+  const connection = googleStatus?.connection;
   return (
     <Panel>
       <SectionTitle title="Settings" subtitle="Workspace security and integrations." />
       <div className="mt-4 grid gap-3">
         <Info label="Signed in as" value={user.email || user.id} />
         <Info label="Workspace" value={workspace.name} />
-        <Info label="Data isolation" value="Every query is scoped by Supabase RLS membership policies." />
-        <Info label="Gmail" value="Not connected in this build. Manual capture and external completion keep state current." />
-        <Info label="Google Calendar" value="Not connected in this build. Calendar sync job is the next integration step." />
+        <Info label="Role" value={googleStatus?.role || 'member'} />
+        <Info label="Data isolation" value="Workspace data is stored in Supabase and scoped by workspace membership policies." />
+        <Info label="Gmail connection status" value={connection?.gmail_connected ? `Connected as ${connection.google_email || user.email || 'Google user'}` : 'Not connected'} />
+        <Info label="Calendar connection status" value={connection?.calendar_connected ? 'Connected' : 'Not connected'} />
+        <Info label="Last sync" value={connection?.last_sync_at ? formatDateTime(connection.last_sync_at) : 'No successful sync yet'} />
+        <Info label="Last agent run" value={googleStatus?.lastRun ? `${googleStatus.lastRun.status} · ${formatDateTime(googleStatus.lastRun.started_at)} · ${googleStatus.lastRun.tasks_created} tasks` : 'No agent sync run yet'} />
+        <Info label="Permissions" value={connection?.scopes?.length ? connection.scopes.join(', ') : 'No Google scopes stored'} />
+        {connection?.last_error && <p className="rounded-2xl bg-red-50 px-4 py-3 text-sm font-bold text-red-700">{connection.last_error}</p>}
+        <div className="flex flex-wrap gap-2">
+          <button disabled={busy || !connection?.status || connection.status !== 'connected'} onClick={onSync} className="rounded-2xl bg-orange-500 px-4 py-3 text-sm font-black text-white disabled:opacity-40">
+            {busy ? 'Syncing...' : 'Run sync'}
+          </button>
+          <button disabled={busy || !connection?.status || connection.status === 'revoked'} onClick={onDisconnectGoogle} className="rounded-2xl border border-stone-200 px-4 py-3 text-sm font-black text-slate-700 disabled:opacity-40">
+            Disconnect Google
+          </button>
+          <a
+            href={`data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ workspace, exportedAt: new Date().toISOString() }, null, 2))}`}
+            download={`sayok-${workspace.name.replace(/\s+/g, '-').toLowerCase()}-export.json`}
+            className="rounded-2xl border border-stone-200 px-4 py-3 text-sm font-black text-slate-700"
+          >
+            Export workspace
+          </a>
+          <button onClick={onDeleteWorkspace} className="rounded-2xl border border-red-200 px-4 py-3 text-sm font-black text-red-700">
+            Delete workspace
+          </button>
+        </div>
       </div>
     </Panel>
   );
