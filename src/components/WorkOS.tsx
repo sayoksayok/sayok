@@ -256,6 +256,7 @@ export default function WorkOS() {
   const [integrationBusy, setIntegrationBusy] = useState(false);
   const [googleStatus, setGoogleStatus] = useState<GoogleStatus | null>(null);
   const [workOsConfig, setWorkOsConfig] = useState<WorkOsConfig | null>(null);
+  const [localMode, setLocalMode] = useState(false);
   const [alreadyDoneTask, setAlreadyDoneTask] = useState<WorkTask | null>(null);
   const [alreadyDoneText, setAlreadyDoneText] = useState('');
   const [alreadyDoneChannel, setAlreadyDoneChannel] = useState('');
@@ -822,18 +823,32 @@ export default function WorkOS() {
     return <FullScreenMessage title="Supabase is not configured" body="Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY before using private workspaces." />;
   }
 
+  if (!user && localMode) {
+    return <LocalPrivateWorkspace onExit={() => setLocalMode(false)} />;
+  }
+
   if (!user) {
+    const authReady = Boolean(workOsConfig?.supabase.reachable);
+    const googleReady = Boolean(workOsConfig?.supabase.reachable && workOsConfig?.googleIntegration.configured);
     return (
       <main className="min-h-screen bg-[#f7f4ee] px-4 py-10 text-slate-950">
         <section className="mx-auto max-w-xl rounded-3xl border border-stone-200 bg-white p-8 shadow-sm">
-          <p className="rounded-2xl bg-amber-50 px-4 py-3 text-xs font-black uppercase tracking-[0.12em] text-amber-800">Development build — authentication and integrations incomplete.</p>
-          <p className="text-xs font-black uppercase tracking-[0.18em] text-orange-700">Private AI work OS</p>
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-orange-700">SayOK private workspace</p>
           <h1 className="mt-4 text-4xl font-black tracking-tight">SayOK starts in your private workspace.</h1>
           <p className="mt-4 text-sm font-semibold leading-6 text-slate-600">
             Your agent organizes projects, tasks, approvals, prepared work, and activity history after login. Public routes never show private company data or demo customer information.
           </p>
-          <button disabled={busy} onClick={signInWithGoogle} className="mt-6 w-full rounded-2xl bg-slate-950 px-5 py-4 text-sm font-black text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50">
-            {busy ? 'Checking login...' : 'Continue with Google'}
+          <button onClick={() => setLocalMode(true)} className="mt-6 w-full rounded-2xl bg-orange-500 px-5 py-4 text-sm font-black text-white hover:bg-orange-600">
+            Start private workspace now
+          </button>
+          <p className="mt-2 text-center text-xs font-bold leading-5 text-slate-500">Temporary mode: saved only in this browser until Google/Supabase is connected.</p>
+          <div className="my-5 flex items-center gap-3">
+            <span className="h-px flex-1 bg-stone-200" />
+            <span className="text-xs font-black uppercase tracking-[0.14em] text-slate-400">or sign in</span>
+            <span className="h-px flex-1 bg-stone-200" />
+          </div>
+          <button disabled={busy || !googleReady} onClick={signInWithGoogle} className="w-full rounded-2xl bg-slate-950 px-5 py-4 text-sm font-black text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40">
+            {busy ? 'Checking login...' : googleReady ? 'Continue with Google' : 'Google sign-in not connected yet'}
           </button>
           <div className="mt-3 grid gap-2">
             <input
@@ -843,8 +858,8 @@ export default function WorkOS() {
               type="email"
               className="rounded-2xl border border-stone-200 px-4 py-3 text-sm font-bold outline-none focus:border-orange-400"
             />
-            <button disabled={busy || !emailInput.trim()} onClick={signInWithEmail} className="w-full rounded-2xl border border-stone-200 bg-white px-5 py-4 text-sm font-black text-slate-950 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-50">
-              Continue with email
+            <button disabled={busy || !emailInput.trim() || !authReady} onClick={signInWithEmail} className="w-full rounded-2xl border border-stone-200 bg-white px-5 py-4 text-sm font-black text-slate-950 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-50">
+              {authReady ? 'Continue with email' : 'Email sign-in not connected yet'}
             </button>
           </div>
           <ConfigStatus config={workOsConfig} />
@@ -1014,6 +1029,254 @@ function ConfigStatus({ config }: { config: WorkOsConfig | null }) {
         No private workspace data is loaded until authentication is connected.
       </p>
     </div>
+  );
+}
+
+type LocalState = {
+  workspaceName: string;
+  tasks: WorkTask[];
+  prepared: PreparedWork[];
+  activity: Activity[];
+};
+
+const localWorkspaceKey = 'sayok-private-browser-workspace-v1';
+
+function createLocalTask(text: string): WorkTask {
+  const now = new Date().toISOString();
+  const lower = text.toLowerCase();
+  const waitingForPerson = /waiting on|wait for|waiting for/.test(lower) ? extractPerson(text) : null;
+  const status: WorkStatus = waitingForPerson ? 'waiting_on_someone' : /send|email|message|follow/.test(lower) ? 'ready' : 'inbox';
+  const due = inferDueDate(text);
+  return {
+    id: crypto.randomUUID(),
+    workspace_id: 'local-private',
+    project_id: null,
+    title: cleanTitle(text).slice(0, 120),
+    description: text,
+    client_company: null,
+    owner_name: 'Me',
+    source: 'private_browser_capture',
+    status,
+    priority: inferPriority(text),
+    due_at: status === 'waiting_on_someone' ? null : due || now,
+    start_at: null,
+    estimated_minutes: null,
+    commercial_value: null,
+    dependency: null,
+    blocker: null,
+    waiting_for_person: waitingForPerson,
+    follow_up_at: status === 'waiting_on_someone' ? due : null,
+    related_email: null,
+    related_meeting: null,
+    related_opportunity: null,
+    completion_record: null,
+    agent_notes: null,
+    user_notes: null,
+    prepared_output: null,
+    last_event_at: now,
+    created_at: now,
+    updated_at: now,
+  };
+}
+
+function localActivity(summary: string, eventType = 'local_update', taskId: string | null = null): Activity {
+  return {
+    id: crypto.randomUUID(),
+    workspace_id: 'local-private',
+    task_id: taskId,
+    project_id: null,
+    actor_type: 'user',
+    event_type: eventType,
+    summary,
+    payload: {},
+    created_at: new Date().toISOString(),
+  };
+}
+
+function LocalPrivateWorkspace({ onExit }: { onExit: () => void }) {
+  const [state, setState] = useState<LocalState>({
+    workspaceName: 'Private browser workspace',
+    tasks: [],
+    prepared: [],
+    activity: [],
+  });
+  const [capture, setCapture] = useState('');
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(localWorkspaceKey);
+      if (saved) setState(JSON.parse(saved) as LocalState);
+    } catch {
+      // Ignore corrupted local cache; a fresh private workspace is safer than blocking the user.
+    }
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem(localWorkspaceKey, JSON.stringify(state));
+  }, [state]);
+
+  const activeTasks = state.tasks.filter((task) => !terminalStatuses.includes(task.status));
+  const doNow = activeTasks
+    .filter((task) => activeStatuses.includes(task.status) && isDueNow(task))
+    .sort((a, b) => priorityWeight(b.priority) - priorityWeight(a.priority) || dateWeight(a.due_at) - dateWeight(b.due_at));
+  const waitingTasks = activeTasks.filter((task) => task.status === 'waiting_on_someone');
+  const selectedTask = state.tasks.find((task) => task.id === selectedId) || doNow[0] || activeTasks[0] || null;
+
+  function updateTask(task: WorkTask, patch: Partial<WorkTask>, summary: string) {
+    const updated = { ...task, ...patch, updated_at: new Date().toISOString(), last_event_at: new Date().toISOString() };
+    setState((current) => ({
+      ...current,
+      tasks: current.tasks.map((item) => (item.id === task.id ? updated : item)),
+      activity: [localActivity(summary, 'task_updated', task.id), ...current.activity].slice(0, 50),
+    }));
+  }
+
+  function addCapture() {
+    const text = capture.trim();
+    if (!text) return;
+    const task = createLocalTask(text);
+    setState((current) => ({
+      ...current,
+      tasks: [task, ...current.tasks],
+      activity: [localActivity(`Captured: ${text}`, 'quick_capture_created', task.id), ...current.activity].slice(0, 50),
+    }));
+    setSelectedId(task.id);
+    setCapture('');
+  }
+
+  function prepareDraft(task: WorkTask) {
+    const companyOrPerson = task.client_company || task.waiting_for_person || 'there';
+    const body = `Subject: Quick next step\n\nHi ${companyOrPerson === 'there' ? 'there' : companyOrPerson},\n\nFollowing up on this:\n\n${task.description || task.title}\n\nWould it make sense to schedule a short call this week and decide the next step?\n\nBest,\nYudai`;
+    const item: PreparedWork = {
+      id: crypto.randomUUID(),
+      workspace_id: 'local-private',
+      task_id: task.id,
+      kind: 'email_draft',
+      title: `Draft: ${task.title}`,
+      body,
+      status: 'prepared',
+      created_at: new Date().toISOString(),
+    };
+    setState((current) => ({
+      ...current,
+      prepared: [item, ...current.prepared],
+      tasks: current.tasks.map((row) => (row.id === task.id ? { ...row, status: 'prepared_by_sayok', prepared_output: body, updated_at: new Date().toISOString() } : row)),
+      activity: [localActivity(`Prepared a draft for "${task.title}".`, 'prepared_work_created', task.id), ...current.activity].slice(0, 50),
+    }));
+  }
+
+  function clearWorkspace() {
+    const confirmed = window.confirm('Clear this browser-only SayOK workspace?');
+    if (!confirmed) return;
+    window.localStorage.removeItem(localWorkspaceKey);
+    setState({ workspaceName: 'Private browser workspace', tasks: [], prepared: [], activity: [] });
+    setSelectedId(null);
+  }
+
+  return (
+    <main className="min-h-screen bg-[#f7f4ee] text-slate-950">
+      <header className="sticky top-0 z-40 border-b border-stone-200 bg-white/95 backdrop-blur">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
+          <div>
+            <p className="text-xl font-black text-orange-600">SayOK</p>
+            <p className="text-xs font-bold text-slate-500">Private browser workspace</p>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={onExit} className="rounded-full border border-stone-200 bg-white px-3 py-2 text-xs font-black text-slate-600">Sign in later</button>
+            <button onClick={clearWorkspace} className="rounded-full border border-red-200 bg-white px-3 py-2 text-xs font-black text-red-700">Clear</button>
+          </div>
+        </div>
+      </header>
+
+      <section className="mx-auto grid max-w-6xl gap-5 px-4 py-5 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="space-y-5">
+          <Panel>
+            <p className="text-xs font-black uppercase tracking-[0.16em] text-orange-700">Today</p>
+            <h1 className="mt-2 text-3xl font-black tracking-tight">Move one relationship forward.</h1>
+            <p className="mt-2 text-sm font-semibold leading-6 text-slate-600">
+              Paste a sales note, follow-up reminder, meeting outcome, or relationship context. SayOK turns it into one actionable item you can finish today.
+            </p>
+            <div className="mt-4 grid gap-2 md:grid-cols-[1fr_auto]">
+              <textarea
+                value={capture}
+                onChange={(event) => setCapture(event.target.value)}
+                placeholder="Example: Follow up with Maya at Bitcoin.com about DOGE licensing this week. Mention ALTLIER, Own The Doge, and suggest a 30-min call."
+                className="min-h-[110px] resize-y rounded-2xl border border-stone-200 px-4 py-3 text-sm font-semibold outline-none focus:border-orange-400"
+              />
+              <button onClick={addCapture} disabled={!capture.trim()} className="rounded-2xl bg-orange-500 px-5 py-4 text-sm font-black text-white disabled:opacity-40">
+                Capture action
+              </button>
+            </div>
+            <p className="mt-3 rounded-2xl bg-amber-50 px-4 py-3 text-xs font-bold leading-5 text-amber-800">
+              Temporary privacy mode: data is stored only in this browser. It is not public, not demo data, and not synced until real authentication is connected.
+            </p>
+          </Panel>
+
+          <Panel>
+            <SectionTitle title="Do now" subtitle="Tasks that need your action. No fake leads, no public demo data." />
+            {doNow.length === 0 ? <EmptyState text="No action captured yet. Paste what you need to do above." /> : (
+              <div className="mt-4 space-y-3">
+                {doNow.map((task) => (
+                  <article key={task.id} className={`cursor-pointer rounded-3xl border p-4 ${selectedTask?.id === task.id ? 'border-orange-300 bg-orange-50/30' : 'border-stone-200 bg-white'}`} onClick={() => setSelectedId(task.id)}>
+                    <div className="flex flex-wrap gap-2">
+                      <Badge>{task.status.replaceAll('_', ' ')}</Badge>
+                      <Badge>{task.priority}</Badge>
+                      {task.due_at && <Badge>Due {formatDate(task.due_at)}</Badge>}
+                    </div>
+                    <h3 className="mt-3 text-xl font-black">{task.title}</h3>
+                    {task.description && <p className="mt-2 text-sm font-semibold leading-6 text-slate-600">{task.description}</p>}
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <SmallButton icon={<Send />} label="Prepare draft" onClick={() => prepareDraft(task)} />
+                      <SmallButton icon={<CheckCircle2 />} label="Done" onClick={() => updateTask(task, { status: 'done', completion_record: { completed_at: new Date().toISOString() } }, `Marked "${task.title}" done.`)} />
+                      <SmallButton icon={<Clock3 />} label="Waiting" onClick={() => updateTask(task, { status: 'waiting_on_someone', follow_up_at: null, due_at: null }, `"${task.title}" is waiting on someone.`)} />
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </Panel>
+
+          <Panel>
+            <SectionTitle title="Prepared drafts" subtitle="Copy into Gmail/LinkedIn/Telegram for now. Auto Gmail drafts return after Google auth is fixed." />
+            {state.prepared.length === 0 ? <EmptyState text="No drafts yet. Click Prepare draft on an action." /> : (
+              <div className="mt-4 space-y-3">
+                {state.prepared.map((item) => (
+                  <article key={item.id} className="rounded-3xl border border-stone-200 p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <h3 className="text-lg font-black">{item.title}</h3>
+                      <button onClick={() => navigator.clipboard.writeText(item.body)} className="rounded-xl bg-slate-950 px-3 py-2 text-xs font-black text-white">Copy</button>
+                    </div>
+                    <pre className="mt-3 whitespace-pre-wrap rounded-2xl bg-stone-50 p-4 text-sm font-semibold leading-6 text-slate-700">{item.body}</pre>
+                  </article>
+                ))}
+              </div>
+            )}
+          </Panel>
+        </div>
+
+        <aside className="space-y-5 lg:sticky lg:top-20 lg:self-start">
+          <Panel>
+            <p className="text-xs font-black uppercase tracking-[0.16em] text-orange-700">Selected action</p>
+            {selectedTask ? (
+              <div>
+                <h2 className="mt-2 text-2xl font-black">{selectedTask.title}</h2>
+                <p className="mt-3 text-sm font-semibold leading-6 text-slate-600">{selectedTask.description}</p>
+                <div className="mt-4 grid grid-cols-2 gap-2">
+                  <Metric label="Active" value={activeTasks.length} />
+                  <Metric label="Waiting" value={waitingTasks.length} />
+                </div>
+              </div>
+            ) : <EmptyState text="Select or capture an action." />}
+          </Panel>
+
+          <Panel>
+            <SectionTitle title="Activity" subtitle="Browser-only audit trail." />
+            <ActivityList activity={state.activity.slice(0, 8)} />
+          </Panel>
+        </aside>
+      </section>
+    </main>
   );
 }
 
