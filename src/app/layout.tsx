@@ -5,17 +5,15 @@ const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.sayok.chat";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
-  title: "SayOK — Private AI Work OS",
+  title: "SayOK — Find real prospects and write outreach",
   description:
-    "A private AI work operating system that helps founders organize tasks, projects, approvals, prepared work, and activity history.",
+    "Read your website, find real organizations and public contact sources, write personalized outreach, and approve every message before sending.",
   keywords: [
-    "private work operating system",
-    "founder productivity",
-    "project memory",
-    "approval workflow",
-    "task execution",
-    "activity history",
-    "work assistant",
+    "lead discovery",
+    "B2B outreach",
+    "sales prospecting",
+    "business development",
+    "public contact research",
   ],
   icons: {
     icon: "/character.jpg",
@@ -23,9 +21,9 @@ export const metadata: Metadata = {
     apple: "/character.jpg",
   },
   openGraph: {
-    title: "SayOK — Private AI Work OS",
+    title: "SayOK — Find real prospects and write outreach",
     description:
-      "Private founder work state, quick capture, approval workflows, prepared work, and activity history.",
+      "From your website to verified public contact sources and personalized outreach.",
     type: "website",
     images: ["/character.jpg"],
   },
@@ -37,7 +35,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="ja">
       <body>{children}</body>
     </html>
   );

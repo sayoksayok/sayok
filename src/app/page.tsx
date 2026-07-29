@@ -1,5 +1,5 @@
-import WorkOS from '@/components/WorkOS';
+import SalesAgent from '@/components/SalesAgent'
 
 export default function Home() {
-  return <WorkOS />;
+  return <SalesAgent />
 }

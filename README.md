@@ -1,63 +1,41 @@
 # SayOK
 
-From first contact to OK.
+見込み客発掘から、会社別の営業メール作成まで。
 
-SayOK is an execution OS for founders, consultants, agencies, and business developers. It turns workspace context, company data, agents, and approvals into concrete next actions that move real business relationships from first contact to conversation, meeting, proposal, follow-up, agreement, and OK.
+SayOK is a focused sales agent for founders and small teams. It reads the user's
+website, finds organizations and public business contacts, rejects unsafe or
+unverifiable addresses, and prepares one editable message per company.
 
-This rebuild intentionally moves SayOK away from being a generic AI message rewriter or company-analysis page. The core product loop is now:
+The primary product is available at both `/` and `/new-deal`.
 
-1. Capture a person, company, conversation, meeting, or opportunity.
-2. Build a concise relationship history.
-3. Define the desired OK.
-4. Determine the current stage.
-5. Recommend one concrete next action.
-6. Draft or prepare that action.
-7. Track whether it was completed.
-8. Remind the user when follow-up is due.
-9. Continue until the opportunity is won, lost, or paused.
+## Product Flow
 
-## Current MVP
+1. **自社を知る** - Enter one website URL. SayOK extracts the offer, customer
+   value, and likely buyers. The user can correct the result.
+2. **相手を探す** - Enter a market and sales goal. SayOK searches for real
+   organizations and keeps only contacts with public evidence.
+3. **文を書く** - Add the sender details once. SayOK creates a company-specific,
+   editable message for every accepted contact.
+4. **承認して送る** - Review one message at a time. SayOK opens a populated Gmail
+   compose window only after explicit confirmation. It never sends automatically.
 
-The first version is designed for an individual founder or small agency owner, not a large enterprise sales team.
+The current workspace and sender profile are stored in the user's browser so the
+flow works without the broken legacy login dependency. Starting a new workspace
+clears the current analysis, leads, and drafts.
 
-Implemented screens:
+## Contact Quality Rules
 
-- `Today`: daily execution list, overdue actions, risks, and recommended actions.
-- `Relationships`: searchable people and companies with relationship strength, last contact, and next action context.
-- `Opportunities`: list and lightweight pipeline views around a specific desired OK.
-- `Opportunity detail`: current situation, known/inferred/unknown context, next action, draft, timeline, blockers, value, probability.
-- `Capture`: paste meeting notes, email text, chat notes, LinkedIn notes, or random context and extract structured relationship data.
-- `Action workspace`: draft a follow-up, mark actions done, schedule next follow-up, or pause weak opportunities.
+The client rejects:
 
-The MVP now requires Supabase Auth and database persistence. Browser localStorage is not used as the source of truth for workspace, task, project, activity, or prepared-work state.
+- Missing or malformed email addresses
+- Placeholder and disposable-looking addresses
+- `noreply` and similar non-receiving mailboxes
+- Guessed or `not_found` addresses
+- Contacts without a usable public source URL
+- Obvious country/domain mismatches
 
-## Product Architecture
-
-SayOK is organized around this hierarchy:
-
-```text
-User
-↓
-Workspace / Organization
-↓
-Integrations
-↓
-Company data
-↓
-Agents
-↓
-Tasks / Actions / Approvals
-```
-
-This is deliberate. The product should not ask the user to re-explain their business every time. A workspace holds the operating context, company data holds the reusable commercial memory, agents prepare work from that context, and approvals keep the human in control before anything external happens.
-
-New MVP surfaces:
-
-- `Workspace`: the operating context for a specific business, brand, or organization.
-- `Integrations`: external inputs such as Gmail, Calendar, CSV, and manual capture.
-- `Company data`: positioning, offers, proof points, websites, and default signature.
-- `Agents`: narrow execution roles with explicit data sources and guardrails.
-- `Tasks / Approvals`: the daily execution queue where prepared actions are approved, completed, snoozed, or paused.
+Every accepted result displays the organization source and email source. A
+`verified` label is not a substitute for reviewing the linked evidence.
 
 ## Tech Stack
 
@@ -65,15 +43,16 @@ New MVP surfaces:
 - React 19
 - TypeScript
 - Tailwind CSS
-- Supabase Auth and database persistence
-- Google OAuth for Gmail and Calendar scopes
-- Anthropic API foundation from the previous app
-- Stripe subscription foundation from the previous app
+- Anthropic for website analysis and personalized drafts
+- Brave Search for organization discovery
+- Firecrawl for website reading
+- Hunter for public email discovery and verification
 
-## Getting Started
+## Local Setup
 
 ```bash
 npm install
+cp .env.example .env.local
 npm run dev
 ```
 
@@ -81,229 +60,64 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ## Environment Variables
 
-Copy `.env.example` to `.env.local` and configure what you need.
-
-Required for AI-backed routes from the previous product:
+Recommended for production-quality sales results:
 
 ```env
 ANTHROPIC_API_KEY=
+BRAVE_SEARCH_API_KEY=
+FIRECRAWL_API_KEY=
+HUNTER_API_KEY=
 ```
 
-Required for login and persisted Work OS data:
+`APOLLO_API_KEY` is optional. The application can run without these integrations,
+but its fallback search and copy are intentionally conservative and should not be
+treated as equal to the connected production workflow.
 
-```env
-NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_ANON_KEY=
-SUPABASE_SERVICE_ROLE_KEY=
-```
+Legacy SayOK routes may still use Supabase, Stripe, ElevenLabs, or Google OAuth.
+Those integrations are not required for the main sales-agent flow.
 
-Required for Gmail and Google Calendar integration:
+## Safety
 
-```env
-GOOGLE_CLIENT_ID=
-GOOGLE_CLIENT_SECRET=
-GOOGLE_TOKEN_ENCRYPTION_KEY=
-```
+- SayOK never sends email automatically.
+- Opening Gmail requires a separate confirmation click.
+- The user edits and approves all external messages.
+- Public business-contact evidence is shown next to every accepted address.
+- Sender identity, business address, contact details, and an opt-out notice are
+  appended to prepared messages.
+- Mass email campaigns are out of scope.
 
-Supabase Google OAuth must request these scopes:
-
-```text
-email profile
-https://www.googleapis.com/auth/gmail.readonly
-https://www.googleapis.com/auth/gmail.compose
-https://www.googleapis.com/auth/calendar.readonly
-```
-
-Required only for subscription pages:
-
-```env
-STRIPE_SECRET_KEY=
-STRIPE_PRICE_MONTHLY=
-STRIPE_PRICE_YEARLY=
-STRIPE_WEBHOOK_SECRET=
-```
-
-Without valid Supabase and Google OAuth configuration, the app must be treated as a development build. It should not be presented as a production-ready connected agent.
-
-Runtime config check:
+## Verification
 
 ```bash
-curl https://sayok.kakehashi.tech/api/work-os/config
+npx tsc --noEmit
+npx eslint src/components/SalesAgent.tsx src/app/api/sales-agent
+npm run build -- --webpack
 ```
 
-This endpoint returns boolean setup status only. It never returns API keys, OAuth tokens, or service-role secrets. If `supabase.reachable` is false, fix `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` in Vercel and redeploy before testing login.
+The repository-wide lint command still reports pre-existing issues in legacy
+translation, Stripe, and Work OS files. The active sales-agent files must remain
+clean while those older routes are retired separately.
 
-## Database
-
-Existing tables from the previous app:
-
-- `users`
-- `translation_history`
-- daily usage tables/RPC from `20260405120000_sayok_daily_usage.sql`
-
-New relationship OS migration:
+The primary flow should also be tested manually at desktop and mobile widths:
 
 ```text
-supabase/migrations/20260718090000_relationship_os.sql
+URL analysis
+-> lead discovery
+-> evidence review
+-> sender profile
+-> message generation
+-> send confirmation
 ```
 
-Legacy execution hierarchy migration:
+## Testnet Escrow Demo
 
-```text
-supabase/migrations/20260720093000_execution_os_hierarchy.sql
-```
+The existing `/new-deal/settlement` route is a separate Mantle Sepolia testnet
+demo. It is disabled unless `NEXT_PUBLIC_ESCROW_DEMO=true`. It must never be
+connected to the production sales flow or mainnet funds. Any mainnet use requires
+an independent third-party security audit first.
 
-Current private Work OS foundation migration:
+## Legacy Code
 
-```text
-supabase/migrations/20260720161000_work_os_foundation.sql
-```
-
-Google integration migration:
-
-```text
-supabase/migrations/20260722133000_work_os_google_integrations.sql
-```
-
-Run these migrations in Supabase before using the new app. The normal app no longer renders demo work on public routes; users must sign in and create a private workspace.
-
-Current Work OS tables:
-
-- `work_os_workspaces`
-- `work_os_members`
-- `work_os_projects`
-- `work_os_tasks`
-- `work_os_activity_events`
-- `work_os_prepared_work`
-- `work_os_user_profiles`
-- `work_os_google_connections`
-- `work_os_sync_runs`
-- `work_os_external_messages`
-- `work_os_calendar_events`
-
-Tenant isolation test:
-
-```bash
-npm run test:tenant-isolation
-```
-
-This creates two confirmed test users, creates a workspace for User A, verifies User A can read their task, verifies User B cannot read or write Workspace A data, then cleans up. It requires a real Supabase project and service role key.
-
-Core state query:
-
-```sql
--- Founder actions that are active now
-select *
-from work_os_tasks
-where workspace_id = :workspace_id
-  and status in (
-    'inbox',
-    'needs_clarification',
-    'ready',
-    'in_progress',
-    'prepared_by_sayok',
-    'needs_user_approval',
-    'scheduled',
-    'blocked'
-  )
-  and (due_at is null or due_at <= now() + interval '1 day')
-order by
-  case priority
-    when 'urgent' then 0
-    when 'high' then 1
-    when 'medium' then 2
-    else 3
-  end,
-  due_at nulls last;
-```
-
-Waiting query:
-
-```sql
--- Waiting items should not appear as founder actions until follow-up date
-select *
-from work_os_tasks
-where workspace_id = :workspace_id
-  and status = 'waiting_on_someone'
-order by follow_up_at nulls last;
-```
-
-Audit trail query:
-
-```sql
-select *
-from work_os_activity_events
-where workspace_id = :workspace_id
-order by created_at desc;
-```
-
-Legacy relationship/execution tables:
-
-- `relationship_companies`
-- `relationship_people`
-- `relationship_opportunities`
-- `relationship_interactions`
-- `relationship_next_actions`
-- `relationship_drafts`
-- `sayok_workspaces`
-- `sayok_integrations`
-- `sayok_company_profiles`
-- `sayok_agents`
-- `sayok_execution_tasks`
-
-The legacy tables are kept for compatibility, but the current product experience uses the `work_os_*` tables. Work OS data is workspace-scoped through `work_os_members` and protected by row-level security. No business-data query should run without a workspace scope.
-
-```sql
--- Today's open execution list
-select *
-from relationship_next_actions
-where user_id = auth.uid()
-  and status = 'open'
-  and (due_at is null or due_at <= now() + interval '1 day')
-order by due_at nulls last, priority;
-```
-
-```sql
--- Active opportunities with no next action
-select *
-from relationship_opportunities
-where user_id = auth.uid()
-  and status = 'active'
-  and (next_action is null or length(trim(next_action)) = 0);
-```
-
-```sql
--- Relationships needing follow-up
-select *
-from relationship_people
-where user_id = auth.uid()
-  and next_follow_up_at <= now()
-order by next_follow_up_at;
-```
-
-## Product Principles
-
-- Default to action, not analysis.
-- One active opportunity should have one clear next action.
-- Do not make users maintain a traditional CRM.
-- Do not automatically send external messages.
-- Clearly distinguish known, inferred, and unknown context.
-- Challenge weak opportunities instead of encouraging endless chasing.
-- Keep external integrations optional until the internal workflow is useful.
-
-## Non-goals
-
-The first version does not build:
-
-- Mass email campaigns
-- Email scraping
-- A fully autonomous outbound sales bot
-- A generic company research database
-- Enterprise CRM customization
-- Advanced revenue forecasting
-- Complex team permissions
-- Marketplace, matching, or payment logic for relationships
-
-## Legacy App
-
-The previous native-expression checker component still exists in `src/components/SayOK.tsx` and the old translation APIs remain available. They are no longer the primary product experience.
+The previous expression checker, private Work OS experiments, Supabase migrations,
+and subscription routes remain in the repository for compatibility. They are not
+the current SayOK home experience and should not block the sales-agent workflow.

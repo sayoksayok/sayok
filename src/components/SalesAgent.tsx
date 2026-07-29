@@ -1,0 +1,980 @@
+'use client'
+
+import {
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  CheckCircle2,
+  Clipboard,
+  ExternalLink,
+  FilePenLine,
+  Mail,
+  Search,
+  Send,
+  ShieldCheck,
+  X,
+} from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import type { Contact, Lead, LeadDiscoveryResult } from '@/lib/lead-types'
+
+type SiteAnalysis = {
+  company: string
+  offering: string
+  valueProp: string
+  idealCustomerProfile: string[]
+  searchKeywords: string[]
+}
+
+type SenderProfile = {
+  senderName: string
+  senderCompany: string
+  senderAddress: string
+  senderContact: string
+  serviceNote: string
+  tone: string
+  language: 'English' | 'Japanese'
+}
+
+type Draft = {
+  subject: string
+  body: string
+  state: 'ready' | 'opened' | 'sent'
+}
+
+type Validation = {
+  ok: boolean
+  flags: string[]
+}
+
+type LeadView = {
+  lead: Lead
+  contact: Contact | null
+  validation: Validation
+}
+
+const STORAGE_KEY = 'sayok:sales-agent:v1'
+const PROFILE_KEY = 'sayok:sales-profile:v1'
+
+const defaultProfile: SenderProfile = {
+  senderName: '',
+  senderCompany: '',
+  senderAddress: '',
+  senderContact: '',
+  serviceNote: '',
+  tone: 'Professional, concise, and human',
+  language: 'English',
+}
+
+const steps = [
+  ['一', '自社を知る'],
+  ['二', '相手を探す'],
+  ['三', '文を書く'],
+  ['四', '承認して送る'],
+] as const
+
+export default function SalesAgent() {
+  const [step, setStep] = useState(1)
+  const [siteUrl, setSiteUrl] = useState('')
+  const [analysis, setAnalysis] = useState<SiteAnalysis | null>(null)
+  const [targetMarket, setTargetMarket] = useState('')
+  const [goal, setGoal] = useState('')
+  const [hint, setHint] = useState('')
+  const [count, setCount] = useState(8)
+  const [result, setResult] = useState<LeadDiscoveryResult | null>(null)
+  const [profile, setProfile] = useState<SenderProfile>(defaultProfile)
+  const [drafts, setDrafts] = useState<Record<string, Draft>>({})
+  const [excludedIds, setExcludedIds] = useState<string[]>([])
+  const [busy, setBusy] = useState('')
+  const [draftingId, setDraftingId] = useState('')
+  const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  const [confirmId, setConfirmId] = useState('')
+  const [copied, setCopied] = useState('')
+  const [hydrated, setHydrated] = useState(false)
+
+  useEffect(() => {
+    try {
+      const savedProfile = localStorage.getItem(PROFILE_KEY)
+      if (savedProfile) setProfile({ ...defaultProfile, ...JSON.parse(savedProfile) })
+    } catch {
+      localStorage.removeItem(PROFILE_KEY)
+    }
+
+    try {
+      const savedWorkspace = localStorage.getItem(STORAGE_KEY)
+      if (savedWorkspace) {
+        const saved = JSON.parse(savedWorkspace) as {
+          step?: number
+          siteUrl?: string
+          analysis?: SiteAnalysis
+          targetMarket?: string
+          goal?: string
+          hint?: string
+          count?: number
+          result?: LeadDiscoveryResult
+          drafts?: Record<string, Draft>
+          excludedIds?: string[]
+        }
+        if (saved.step && saved.step >= 1 && saved.step <= 4) setStep(saved.step)
+        setSiteUrl(saved.siteUrl || '')
+        setAnalysis(saved.analysis || null)
+        setTargetMarket(saved.targetMarket || '')
+        setGoal(saved.goal || '')
+        setHint(saved.hint || '')
+        if (saved.count && [5, 8, 10, 14].includes(saved.count)) setCount(saved.count)
+        setResult(saved.result || null)
+        setDrafts(saved.drafts || {})
+        setExcludedIds(saved.excludedIds || [])
+      }
+    } catch {
+      localStorage.removeItem(STORAGE_KEY)
+    } finally {
+      setHydrated(true)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!hydrated) return
+    localStorage.setItem(PROFILE_KEY, JSON.stringify(profile))
+  }, [hydrated, profile])
+
+  useEffect(() => {
+    if (!hydrated) return
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      step,
+      siteUrl,
+      analysis,
+      targetMarket,
+      goal,
+      hint,
+      count,
+      result,
+      drafts,
+      excludedIds,
+    }))
+  }, [hydrated, step, siteUrl, analysis, targetMarket, goal, hint, count, result, drafts, excludedIds])
+
+  const leadViews = useMemo(() => {
+    if (!result) return []
+    return result.leads.map((lead) => {
+      const contacts = result.contacts
+        .filter((contact) => contact.leadId === lead.id)
+        .sort((a, b) => contactScore(b) - contactScore(a))
+      const contact = contacts.find((candidate) => validateContact(candidate, lead, targetMarket).ok) || contacts[0] || null
+      return { lead, contact, validation: validateContact(contact, lead, targetMarket) }
+    })
+  }, [result, targetMarket])
+
+  const accepted = leadViews.filter((item) => item.validation.ok && !excludedIds.includes(item.lead.id))
+  const rejected = leadViews.filter((item) => !item.validation.ok || excludedIds.includes(item.lead.id))
+  const drafted = accepted.filter((item) => Boolean(drafts[item.lead.id]))
+  const profileComplete = Boolean(
+    profile.senderName.trim()
+    && profile.senderCompany.trim()
+    && profile.senderAddress.trim()
+    && profile.senderContact.trim(),
+  )
+
+  async function analyzeSite() {
+    if (!siteUrl.trim()) return
+    setBusy('analyze')
+    setError('')
+    setNotice('')
+    try {
+      const response = await fetch('/api/sales-agent/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ websiteUrl: normalizeUrl(siteUrl) }),
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || 'サイトを分析できませんでした。')
+      setSiteUrl(normalizeUrl(siteUrl))
+      setAnalysis(data.analysis as SiteAnalysis)
+      setResult(null)
+      setDrafts({})
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'サイトを分析できませんでした。')
+    } finally {
+      setBusy('')
+    }
+  }
+
+  async function findLeads() {
+    if (!analysis || !targetMarket.trim() || !goal.trim()) {
+      setError('ターゲット市場と営業目的を入力してください。')
+      return
+    }
+    setBusy('search')
+    setError('')
+    setNotice('')
+    try {
+      const response = await fetch('/api/lead-discovery', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          websiteUrl: normalizeUrl(siteUrl),
+          targetMarket: targetMarket.trim(),
+          goal: [
+            goal.trim(),
+            `Ideal customers: ${analysis.idealCustomerProfile.join(' / ')}`,
+            hint.trim() ? `Additional conditions: ${hint.trim()}` : '',
+          ].filter(Boolean).join('. '),
+          maxLeads: count,
+          senderProfile: `${profile.senderName} — ${profile.senderCompany}`,
+        }),
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || '見込み客を探せませんでした。')
+      setResult(data as LeadDiscoveryResult)
+      setDrafts({})
+      setExcludedIds([])
+      setNotice('検索が完了しました。出典を確認できる連絡先だけを送信候補にしています。')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '見込み客を探せませんでした。')
+    } finally {
+      setBusy('')
+    }
+  }
+
+  async function createDraft(item: LeadView) {
+    if (!analysis) return
+    if (!profile.senderName.trim() || !profile.senderCompany.trim()) {
+      setError('先に差出人の氏名と会社名を入力してください。')
+      return
+    }
+    setDraftingId(item.lead.id)
+    setError('')
+    try {
+      const response = await fetch('/api/sales-agent/draft', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          company: cleanOrganizationName(item.lead),
+          website: item.lead.organizationWebsite,
+          reason: item.lead.reasonForFit,
+          evidence: item.lead.sourceUrl,
+          contactTitle: item.contact?.title,
+          senderName: profile.senderName,
+          senderCompany: profile.senderCompany,
+          offering: analysis.offering,
+          valueProp: analysis.valueProp,
+          serviceNote: profile.serviceNote,
+          tone: profile.tone,
+          language: profile.language,
+        }),
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || '文面を作成できませんでした。')
+      setDrafts((current) => ({
+        ...current,
+        [item.lead.id]: { ...data.draft, state: 'ready' },
+      }))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '文面を作成できませんでした。')
+    } finally {
+      setDraftingId('')
+    }
+  }
+
+  async function createAllDrafts() {
+    setBusy('draft-all')
+    setError('')
+    for (const item of accepted) {
+      if (!drafts[item.lead.id]) await createDraft(item)
+    }
+    setBusy('')
+  }
+
+  function openGmail(item: LeadView) {
+    const contact = item.contact
+    const draft = drafts[item.lead.id]
+    if (!contact?.email || !draft) return
+    const fullBody = `${draft.body}\n\n${buildFooter(profile)}`
+    const url = new URL('https://mail.google.com/mail/')
+    url.searchParams.set('view', 'cm')
+    url.searchParams.set('fs', '1')
+    url.searchParams.set('to', contact.email)
+    url.searchParams.set('su', draft.subject)
+    url.searchParams.set('body', fullBody)
+    window.open(url.toString(), '_blank', 'noopener,noreferrer')
+    setDrafts((current) => ({
+      ...current,
+      [item.lead.id]: { ...draft, state: 'opened' },
+    }))
+    setConfirmId('')
+  }
+
+  function resetWorkspace() {
+    if (!window.confirm('現在の分析・リード・下書きを消して、新しく始めますか？')) return
+    localStorage.removeItem(STORAGE_KEY)
+    setStep(1)
+    setSiteUrl('')
+    setAnalysis(null)
+    setTargetMarket('')
+    setGoal('')
+    setHint('')
+    setResult(null)
+    setDrafts({})
+    setExcludedIds([])
+    setError('')
+    setNotice('')
+  }
+
+  async function copyText(key: string, text: string) {
+    await navigator.clipboard.writeText(text)
+    setCopied(key)
+    window.setTimeout(() => setCopied(''), 1600)
+  }
+
+  function exportCsv() {
+    if (!result) return
+    const rows = [
+      ['Organization', 'Website', 'Reason', 'Lead source', 'Contact', 'Title', 'Email', 'Email status', 'Email source', 'Draft subject'],
+      ...leadViews.map((item) => [
+        cleanOrganizationName(item.lead),
+        item.lead.organizationWebsite,
+        item.lead.reasonForFit,
+        item.lead.sourceUrl,
+        item.contact?.name || '',
+        item.contact?.title || '',
+        item.contact?.email || '',
+        item.contact?.emailStatus || 'not_found',
+        item.contact?.sourceUrl || '',
+        drafts[item.lead.id]?.subject || '',
+      ]),
+    ]
+    const csv = rows.map((row) => row.map(csvCell).join(',')).join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `sayok-outreach-${new Date().toISOString().slice(0, 10)}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
+  return (
+    <div className="min-h-screen bg-[#f2f3f0] text-[#20242b]">
+      <header className="border-b border-[#d9dbd5] bg-[#fbfbf9]">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-2 border-[#bc3f34] font-serif text-xs font-bold text-[#bc3f34]">
+              OK
+            </div>
+            <div className="min-w-0">
+              <p className="text-lg font-black">SayOK</p>
+              <p className="truncate text-xs font-semibold text-[#6b7076]">見込み客発掘・営業メールエージェント</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={resetWorkspace}
+            className="rounded-md border border-[#d9dbd5] bg-white px-3 py-2 text-xs font-bold text-[#4f555c] hover:border-[#2b4c7e]"
+          >
+            新しく始める
+          </button>
+        </div>
+        <nav className="mx-auto grid max-w-6xl grid-cols-2 px-4 sm:grid-cols-4 sm:px-6" aria-label="営業工程">
+          {steps.map(([number, label], index) => {
+            const itemStep = index + 1
+            const active = step === itemStep
+            const complete = step > itemStep
+            return (
+              <button
+                key={label}
+                type="button"
+                onClick={() => setStep(itemStep)}
+                className={`border-b-3 px-2 py-3 text-left text-sm font-bold transition ${
+                  active
+                    ? 'border-[#2b4c7e] text-[#2b4c7e]'
+                    : complete
+                      ? 'border-transparent text-[#20242b]'
+                      : 'border-transparent text-[#8a8f94]'
+                }`}
+              >
+                <span className="mr-2 font-serif">{number}</span>{label}
+              </button>
+            )
+          })}
+        </nav>
+      </header>
+
+      <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
+        {error && <Alert tone="error" onClose={() => setError('')}>{error}</Alert>}
+        {notice && <Alert tone="success" onClose={() => setNotice('')}>{notice}</Alert>}
+
+        {step === 1 && (
+          <section>
+            <SectionHeading
+              eyebrow="STEP 1"
+              title="まず、何を売っているかを読み取る。"
+              copy="自社サイトのURLだけで開始できます。読み取った内容は検索前に編集できます。"
+            />
+            <div className="mt-7 flex flex-col gap-3 sm:flex-row">
+              <label className="sr-only" htmlFor="site-url">自社サイトURL</label>
+              <input
+                id="site-url"
+                type="url"
+                value={siteUrl}
+                onChange={(event) => setSiteUrl(event.target.value)}
+                onKeyDown={(event) => event.key === 'Enter' && analyzeSite()}
+                placeholder="https://your-company.com"
+                className="min-h-12 flex-1 rounded-md border border-[#cfd2cc] bg-white px-4 text-base outline-none focus:border-[#2b4c7e] focus:ring-3 focus:ring-[#2b4c7e]/10"
+              />
+              <PrimaryButton onClick={analyzeSite} disabled={!siteUrl.trim() || busy === 'analyze'}>
+                <Search size={17} />
+                {busy === 'analyze' ? 'サイトを読んでいます…' : 'サイトを分析'}
+              </PrimaryButton>
+            </div>
+
+            {analysis && (
+              <div className="mt-8 border-t border-[#d9dbd5] pt-7">
+                <div className="grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
+                  <div>
+                    <p className="text-xs font-black tracking-[0.14em] text-[#bc3f34]">読み取り結果</p>
+                    <h2 className="mt-2 text-3xl font-black leading-tight">{analysis.company}</h2>
+                    <p className="mt-3 text-sm leading-7 text-[#5f656c]">{analysis.offering}</p>
+                    <div className="mt-5 border-l-3 border-[#2b4c7e] pl-4">
+                      <p className="text-xs font-bold text-[#6b7076]">顧客にとっての価値</p>
+                      <p className="mt-1 text-sm font-semibold leading-6">{analysis.valueProp}</p>
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-[#d9dbd5] bg-[#fbfbf9] p-5">
+                    <label className="text-xs font-black tracking-[0.1em] text-[#6b7076]" htmlFor="icp">
+                      想定顧客（1行に1つ・編集可）
+                    </label>
+                    <textarea
+                      id="icp"
+                      value={analysis.idealCustomerProfile.join('\n')}
+                      onChange={(event) => setAnalysis({
+                        ...analysis,
+                        idealCustomerProfile: event.target.value.split('\n').map((item) => item.trim()).filter(Boolean),
+                      })}
+                      className="mt-3 min-h-36 w-full resize-y rounded-md border border-[#d9dbd5] bg-white p-3 text-sm leading-6 outline-none focus:border-[#2b4c7e]"
+                    />
+                  </div>
+                </div>
+                <div className="mt-6 flex justify-end">
+                  <PrimaryButton onClick={() => setStep(2)}>
+                    この内容で相手を探す <ArrowRight size={17} />
+                  </PrimaryButton>
+                </div>
+              </div>
+            )}
+          </section>
+        )}
+
+        {step === 2 && (
+          <section>
+            <SectionHeading
+              eyebrow="STEP 2"
+              title="根拠のある営業先だけを集める。"
+              copy="公開ページの出典がないメールや、推測で作られたアドレスは送信候補から外します。"
+            />
+            {!analysis ? (
+              <MissingStep onClick={() => setStep(1)} label="先に自社サイトを分析してください。" />
+            ) : (
+              <>
+                <div className="mt-7 grid gap-4 rounded-lg border border-[#d9dbd5] bg-[#fbfbf9] p-5 md:grid-cols-2">
+                  <Field label="ターゲット市場" required>
+                    <input value={targetMarket} onChange={(event) => setTargetMarket(event.target.value)} placeholder="例: United States / Japan" className="field-input" />
+                  </Field>
+                  <Field label="営業目的" required>
+                    <input value={goal} onChange={(event) => setGoal(event.target.value)} placeholder="例: 販売代理店との商談を取る" className="field-input" />
+                  </Field>
+                  <Field label="追加条件">
+                    <input value={hint} onChange={(event) => setHint(event.target.value)} placeholder="例: 従業員20〜200名 / 過去顧客は除外" className="field-input" />
+                  </Field>
+                  <Field label="探す件数">
+                    <select value={count} onChange={(event) => setCount(Number(event.target.value))} className="field-input">
+                      {[5, 8, 10, 14].map((value) => <option key={value} value={value}>{value}社</option>)}
+                    </select>
+                  </Field>
+                  <div className="md:col-span-2">
+                    <PrimaryButton onClick={findLeads} disabled={busy === 'search'}>
+                      <Search size={17} />
+                      {busy === 'search' ? '検索・出典確認中…（最大2分）' : result ? '条件を変えて再検索' : '探索を開始'}
+                    </PrimaryButton>
+                  </div>
+                </div>
+
+                {result && (
+                  <div className="mt-8">
+                    <div className="flex flex-col gap-3 border-b border-[#d9dbd5] pb-4 sm:flex-row sm:items-end sm:justify-between">
+                      <div>
+                        <p className="text-xs font-black tracking-[0.12em] text-[#2b4c7e]">送信可能 {accepted.length}件</p>
+                        <h2 className="mt-1 text-2xl font-black">検証できた営業先</h2>
+                      </div>
+                      <button type="button" onClick={exportCsv} className="inline-flex items-center gap-2 rounded-md border border-[#d9dbd5] bg-white px-3 py-2 text-sm font-bold hover:border-[#2b4c7e]">
+                        <Clipboard size={15} /> CSV
+                      </button>
+                    </div>
+
+                    {accepted.length ? (
+                      <div className="mt-5 grid gap-4">
+                        {accepted.map((item) => (
+                          <LeadRow
+                            key={item.lead.id}
+                            item={item}
+                            onExclude={() => setExcludedIds((ids) => [...ids, item.lead.id])}
+                          />
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="mt-5 rounded-lg border border-[#d9dbd5] bg-white p-6">
+                        <p className="font-bold">出典付きメールを確認できた候補はありませんでした。</p>
+                        <p className="mt-2 text-sm leading-6 text-[#6b7076]">推測メールは表示しません。条件を広げるか、下の未採用候補の問い合わせページを確認してください。</p>
+                      </div>
+                    )}
+
+                    {rejected.length > 0 && (
+                      <details className="mt-5 rounded-lg border border-dashed border-[#c9ccc6] bg-[#f8f8f5]">
+                        <summary className="cursor-pointer px-4 py-3 text-sm font-bold text-[#5f656c]">
+                          未採用 {rejected.length}件（メール未発見・出典不足・手動除外）
+                        </summary>
+                        <div className="border-t border-[#d9dbd5] px-4 py-2">
+                          {rejected.map((item) => (
+                            <div key={item.lead.id} className="flex flex-col gap-2 border-b border-[#e2e4df] py-3 last:border-0 sm:flex-row sm:items-center sm:justify-between">
+                              <div>
+                                <p className="font-bold">{cleanOrganizationName(item.lead)}</p>
+                                <p className="mt-1 text-xs text-[#6b7076]">{excludedIds.includes(item.lead.id) ? '手動で除外' : item.validation.flags.join(' / ')}</p>
+                              </div>
+                              <div className="flex flex-wrap gap-3 text-xs font-bold">
+                                <a href={item.lead.sourceUrl} target="_blank" rel="noreferrer" className="text-[#2b4c7e] underline">候補の出典</a>
+                                {excludedIds.includes(item.lead.id) && (
+                                  <button type="button" onClick={() => setExcludedIds((ids) => ids.filter((id) => id !== item.lead.id))} className="text-[#bc3f34]">戻す</button>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    )}
+
+                    {accepted.length > 0 && (
+                      <div className="mt-6 flex justify-end">
+                        <PrimaryButton onClick={() => setStep(3)}>
+                          {accepted.length}社の文面を書く <ArrowRight size={17} />
+                        </PrimaryButton>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+          </section>
+        )}
+
+        {step === 3 && (
+          <section>
+            <SectionHeading
+              eyebrow="STEP 3"
+              title="会社ごとに、送れる文面を作る。"
+              copy="相手を選んだ根拠を冒頭に使い、定型文に見えない短いメールを作成します。内容はすべて編集できます。"
+            />
+            {!accepted.length ? (
+              <MissingStep onClick={() => setStep(2)} label="先に出典付きの営業先を見つけてください。" />
+            ) : (
+              <>
+                <div className="mt-7 rounded-lg border border-[#d9dbd5] bg-[#fbfbf9] p-5">
+                  <div className="flex flex-col gap-2 border-b border-[#d9dbd5] pb-4 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                      <p className="text-xs font-black tracking-[0.12em] text-[#bc3f34]">差出人情報</p>
+                      <h2 className="mt-1 text-xl font-black">法令対応フッターへ自動挿入</h2>
+                    </div>
+                    <span className="text-xs font-semibold text-[#6b7076]">この端末のブラウザに保存</span>
+                  </div>
+                  <div className="mt-5 grid gap-4 md:grid-cols-2">
+                    <Field label="氏名" required><input className="field-input" value={profile.senderName} onChange={(event) => setProfile({ ...profile, senderName: event.target.value })} /></Field>
+                    <Field label="会社名" required><input className="field-input" value={profile.senderCompany} onChange={(event) => setProfile({ ...profile, senderCompany: event.target.value })} /></Field>
+                    <Field label="事業者住所" required><input className="field-input" value={profile.senderAddress} onChange={(event) => setProfile({ ...profile, senderAddress: event.target.value })} /></Field>
+                    <Field label="連絡先メールまたは電話" required><input className="field-input" value={profile.senderContact} onChange={(event) => setProfile({ ...profile, senderContact: event.target.value })} /></Field>
+                    <Field label="提案内容の補足"><input className="field-input" value={profile.serviceNote} onChange={(event) => setProfile({ ...profile, serviceNote: event.target.value })} placeholder="例: グループ対応 / 導入支援 / 実績" /></Field>
+                    <Field label="メール言語">
+                      <select className="field-input" value={profile.language} onChange={(event) => setProfile({ ...profile, language: event.target.value as SenderProfile['language'] })}>
+                        <option value="English">English</option>
+                        <option value="Japanese">日本語</option>
+                      </select>
+                    </Field>
+                  </div>
+                </div>
+
+                <div className="mt-7 flex flex-col gap-3 border-b border-[#d9dbd5] pb-4 sm:flex-row sm:items-end sm:justify-between">
+                  <div>
+                    <p className="text-xs font-black text-[#2b4c7e]">{drafted.length} / {accepted.length}通 作成済み</p>
+                    <h2 className="mt-1 text-2xl font-black">メール下書き</h2>
+                  </div>
+                  <PrimaryButton onClick={createAllDrafts} disabled={busy === 'draft-all' || !profile.senderName || !profile.senderCompany}>
+                    <FilePenLine size={17} /> {busy === 'draft-all' ? '順番に作成中…' : '未作成をまとめて生成'}
+                  </PrimaryButton>
+                </div>
+
+                <div className="mt-5 grid gap-4">
+                  {accepted.map((item) => {
+                    const draft = drafts[item.lead.id]
+                    return (
+                      <article key={item.lead.id} className="rounded-lg border border-[#d9dbd5] bg-white p-5">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                          <div>
+                            <h3 className="text-lg font-black">{cleanOrganizationName(item.lead)}</h3>
+                            <p className="mt-1 text-xs font-semibold text-[#6b7076]">{item.contact?.email}</p>
+                          </div>
+                          {!draft && (
+                            <SecondaryButton onClick={() => createDraft(item)} disabled={draftingId === item.lead.id}>
+                              <FilePenLine size={15} /> {draftingId === item.lead.id ? '作成中…' : 'この会社向けに生成'}
+                            </SecondaryButton>
+                          )}
+                        </div>
+                        {draft && (
+                          <div className="mt-4">
+                            <label className="text-xs font-black text-[#6b7076]">件名</label>
+                            <input
+                              value={draft.subject}
+                              onChange={(event) => setDrafts({ ...drafts, [item.lead.id]: { ...draft, subject: event.target.value } })}
+                              className="field-input mt-2 font-bold"
+                            />
+                            <label className="mt-4 block text-xs font-black text-[#6b7076]">本文</label>
+                            <textarea
+                              value={draft.body}
+                              onChange={(event) => setDrafts({ ...drafts, [item.lead.id]: { ...draft, body: event.target.value } })}
+                              className="field-input mt-2 min-h-52 resize-y leading-7"
+                            />
+                            <div className="mt-3 whitespace-pre-wrap border-t border-dashed border-[#d9dbd5] pt-3 text-xs leading-6 text-[#6b7076]">
+                              {buildFooter(profileComplete ? profile : { ...profile, senderName: profile.senderName || '氏名未入力' })}
+                            </div>
+                            <div className="mt-4 flex justify-end">
+                              <SecondaryButton onClick={() => createDraft(item)} disabled={draftingId === item.lead.id}>
+                                書き直す
+                              </SecondaryButton>
+                            </div>
+                          </div>
+                        )}
+                      </article>
+                    )
+                  })}
+                </div>
+
+                {drafted.length > 0 && (
+                  <div className="mt-6 flex justify-end">
+                    <PrimaryButton onClick={() => setStep(4)} disabled={!profileComplete}>
+                      {profileComplete ? `${drafted.length}通を確認して送る` : '必須の差出人情報を入力してください'} <ArrowRight size={17} />
+                    </PrimaryButton>
+                  </div>
+                )}
+              </>
+            )}
+          </section>
+        )}
+
+        {step === 4 && (
+          <section>
+            <SectionHeading
+              eyebrow="STEP 4"
+              title="一通ずつ確認し、本人が送る。"
+              copy="SayOKはGmailの作成画面まで準備します。最終確認と送信は必ずあなたが行います。"
+            />
+            {!profileComplete || !drafted.length ? (
+              <MissingStep onClick={() => setStep(3)} label="先に差出人情報とメール下書きを完成させてください。" />
+            ) : (
+              <div className="mt-7 grid gap-4">
+                {drafted.map((item) => {
+                  const draft = drafts[item.lead.id]
+                  const contact = item.contact
+                  const fullEmail = `${draft.body}\n\n${buildFooter(profile)}`
+                  return (
+                    <article key={item.lead.id} className="rounded-lg border border-[#d9dbd5] bg-white p-5">
+                      <div className="flex flex-col gap-3 border-b border-[#e2e4df] pb-4 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <StatusPill state={draft.state} />
+                            <span className="text-xs font-bold text-[#6b7076]">{item.validation.flags.join(' · ')}</span>
+                          </div>
+                          <h2 className="mt-2 text-xl font-black">{cleanOrganizationName(item.lead)}</h2>
+                          <p className="mt-1 break-all text-sm font-semibold text-[#2b4c7e]">{contact?.email}</p>
+                        </div>
+                        <a href={contact?.sourceUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-bold text-[#2b4c7e] underline">
+                          メールの出典 <ExternalLink size={13} />
+                        </a>
+                      </div>
+                      <div className="mt-4">
+                        <p className="font-black">{draft.subject}</p>
+                        <div className="mt-3 max-h-80 overflow-auto whitespace-pre-wrap rounded-md bg-[#f7f7f4] p-4 text-sm leading-7">{fullEmail}</div>
+                      </div>
+                      <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+                        <SecondaryButton onClick={() => copyText(item.lead.id, fullEmail)}>
+                          <Clipboard size={15} /> {copied === item.lead.id ? 'コピー済み' : '本文をコピー'}
+                        </SecondaryButton>
+                        {draft.state !== 'sent' && confirmId !== item.lead.id && (
+                          <PrimaryButton onClick={() => setConfirmId(item.lead.id)}>
+                            <Mail size={17} /> Gmailで開く
+                          </PrimaryButton>
+                        )}
+                        {confirmId === item.lead.id && (
+                          <div className="flex w-full flex-col gap-3 rounded-md border border-[#bc3f34] bg-[#bc3f34]/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+                            <p className="text-sm font-bold">この宛先と内容でGmailの作成画面を開きます。まだ送信はされません。</p>
+                            <div className="flex shrink-0 gap-2">
+                              <SecondaryButton onClick={() => setConfirmId('')}>戻る</SecondaryButton>
+                              <PrimaryButton onClick={() => openGmail(item)}><Send size={16} /> 承認して開く</PrimaryButton>
+                            </div>
+                          </div>
+                        )}
+                        {draft.state === 'opened' && (
+                          <button
+                            type="button"
+                            onClick={() => setDrafts({ ...drafts, [item.lead.id]: { ...draft, state: 'sent' } })}
+                            className="inline-flex min-h-10 items-center gap-2 rounded-md border border-emerald-300 bg-emerald-50 px-4 text-sm font-black text-emerald-800"
+                          >
+                            <Check size={16} /> 送信済みにする
+                          </button>
+                        )}
+                      </div>
+                    </article>
+                  )
+                })}
+              </div>
+            )}
+            <p className="mt-6 text-xs leading-6 text-[#6b7076]">
+              公開された事業者向け連絡先のみを対象にし、「営業お断り」の記載がある宛先には送らないでください。最終的な送信判断と適法性の確認は送信者が行ってください。
+            </p>
+          </section>
+        )}
+      </main>
+    </div>
+  )
+}
+
+function SectionHeading({ eyebrow, title, copy }: { eyebrow: string; title: string; copy: string }) {
+  return (
+    <div className="max-w-3xl">
+      <p className="text-xs font-black tracking-[0.18em] text-[#bc3f34]">{eyebrow}</p>
+      <h1 className="mt-3 text-3xl font-black leading-tight sm:text-5xl">{title}</h1>
+      <p className="mt-4 text-base font-medium leading-7 text-[#5f656c] sm:text-lg">{copy}</p>
+    </div>
+  )
+}
+
+function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-xs font-black tracking-[0.08em] text-[#5f656c]">
+        {label}{required && <span className="ml-1 text-[#bc3f34]">必須</span>}
+      </span>
+      {children}
+    </label>
+  )
+}
+
+function PrimaryButton({ children, onClick, disabled }: { children: React.ReactNode; onClick: () => void; disabled?: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="inline-flex min-h-12 items-center justify-center gap-2 rounded-md border border-[#1e3a63] bg-[#2b4c7e] px-5 text-sm font-black text-white hover:bg-[#1e3a63] disabled:cursor-not-allowed disabled:opacity-45"
+    >
+      {children}
+    </button>
+  )
+}
+
+function SecondaryButton({ children, onClick, disabled }: { children: React.ReactNode; onClick: () => void; disabled?: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-[#cfd2cc] bg-white px-4 text-sm font-black text-[#30353b] hover:border-[#2b4c7e] disabled:cursor-not-allowed disabled:opacity-45"
+    >
+      {children}
+    </button>
+  )
+}
+
+function Alert({ children, tone, onClose }: { children: React.ReactNode; tone: 'error' | 'success'; onClose: () => void }) {
+  return (
+    <div className={`mb-6 flex items-start justify-between gap-4 rounded-md border p-4 text-sm font-bold ${
+      tone === 'error' ? 'border-red-200 bg-red-50 text-red-800' : 'border-emerald-200 bg-emerald-50 text-emerald-800'
+    }`}>
+      <span>{children}</span>
+      <button type="button" onClick={onClose} aria-label="閉じる"><X size={17} /></button>
+    </div>
+  )
+}
+
+function MissingStep({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <div className="mt-7 rounded-lg border border-[#d9dbd5] bg-white p-6">
+      <p className="font-bold">{label}</p>
+      <button type="button" onClick={onClick} className="mt-4 inline-flex items-center gap-2 text-sm font-black text-[#2b4c7e]">
+        <ArrowLeft size={16} /> 前の工程へ戻る
+      </button>
+    </div>
+  )
+}
+
+function LeadRow({ item, onExclude }: { item: LeadView; onExclude: () => void }) {
+  return (
+    <article className="grid gap-4 rounded-lg border border-[#d9dbd5] bg-white p-5 md:grid-cols-[auto_minmax(0,1fr)_auto]">
+      <div className="flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#2b4c7e] text-[#2b4c7e]">
+        <ShieldCheck size={20} />
+      </div>
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="text-lg font-black">{cleanOrganizationName(item.lead)}</h3>
+          <span className="rounded-full bg-[#eef2f7] px-2 py-1 text-xs font-bold text-[#2b4c7e]">
+            {Math.round(item.lead.confidence * 100)}% fit
+          </span>
+        </div>
+        <a href={item.lead.organizationWebsite} target="_blank" rel="noreferrer" className="mt-1 inline-flex items-center gap-1 break-all text-xs font-bold text-[#2b4c7e] underline">
+          {displayHost(item.lead.organizationWebsite)} <ExternalLink size={12} />
+        </a>
+        <p className="mt-3 text-sm leading-6">{item.lead.reasonForFit}</p>
+        <p className="mt-2 text-xs leading-5 text-[#6b7076]">
+          根拠: <a href={item.lead.sourceUrl} target="_blank" rel="noreferrer" className="font-bold text-[#2b4c7e] underline">公開ページを確認</a>
+        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <span className="rounded-md border border-[#d9dbd5] bg-[#fbfbf9] px-3 py-2 font-mono text-xs font-bold">{item.contact?.email}</span>
+          {item.validation.flags.map((flag) => <span key={flag} className="rounded-full border border-[#d9dbd5] px-2 py-1 text-[11px] font-bold text-[#5f656c]">{flag}</span>)}
+          <a href={item.contact?.sourceUrl} target="_blank" rel="noreferrer" className="text-xs font-bold text-[#2b4c7e] underline">メール出典</a>
+        </div>
+      </div>
+      <button type="button" onClick={onExclude} className="self-start rounded-md border border-[#d9dbd5] px-3 py-2 text-xs font-bold text-[#6b7076] hover:border-[#bc3f34] hover:text-[#bc3f34]">
+        除外
+      </button>
+    </article>
+  )
+}
+
+function StatusPill({ state }: { state: Draft['state'] }) {
+  const styles = {
+    ready: 'bg-[#fff3e8] text-[#a54813]',
+    opened: 'bg-[#eef2f7] text-[#2b4c7e]',
+    sent: 'bg-emerald-50 text-emerald-800',
+  }
+  const labels = { ready: '送信準備完了', opened: 'Gmailで開いた', sent: '送信済み' }
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-black ${styles[state]}`}>
+      {state === 'sent' && <CheckCircle2 size={13} />}{labels[state]}
+    </span>
+  )
+}
+
+function validateContact(contact: Contact | null, lead: Lead, targetMarket: string): Validation {
+  if (!contact?.email) return { ok: false, flags: ['メール未発見'] }
+  const email = contact.email.trim().toLowerCase()
+  if (!/^[a-z0-9][a-z0-9._%+-]*@[a-z0-9.-]+\.[a-z]{2,}$/.test(email)) return { ok: false, flags: ['形式不正'] }
+  const [local, domain] = email.split('@')
+  if (
+    /^(x{3,}|example|sample|test|yourname|name|email|user)$/i.test(local)
+    || /(^|\.)(x{2,}|example|sample|test|localhost)(\.|$)/i.test(domain)
+    || ['example.com', 'example.org', 'example.net', 'sample.com', 'test.com', 'mailinator.com'].includes(domain)
+  ) {
+    return { ok: false, flags: ['ダミーアドレス'] }
+  }
+  if (['noreply', 'no-reply', 'donotreply', 'do-not-reply', 'mailer-daemon', 'postmaster'].includes(local)) {
+    return { ok: false, flags: ['送信不可アドレス'] }
+  }
+  if (contact.emailStatus === 'guessed' || contact.emailStatus === 'not_found') return { ok: false, flags: ['推測メールのため不採用'] }
+  if (!isUsableSource(contact.sourceUrl)) return { ok: false, flags: ['公開出典なし'] }
+  if (isObviousMarketMismatch(lead, targetMarket)) return { ok: false, flags: ['対象市場外の可能性'] }
+
+  const flags = [contact.emailStatus === 'verified' ? '検証済み' : '公開ページで発見']
+  const siteDomain = registeredDomain(safeHost(lead.organizationWebsite))
+  const emailDomain = registeredDomain(domain)
+  if (siteDomain && emailDomain && siteDomain === emailDomain) flags.push('企業ドメイン一致')
+  else flags.push('ドメイン要確認')
+  if (['info', 'contact', 'sales', 'hello', 'support', 'inquiry'].includes(local)) flags.push('代表窓口')
+  return { ok: true, flags }
+}
+
+function contactScore(contact: Contact) {
+  let score = contact.confidence || 0
+  if (contact.emailStatus === 'verified') score += 2
+  if (isUsableSource(contact.sourceUrl)) score += 1
+  if (contact.name) score += 0.3
+  if (contact.title) score += 0.2
+  return score
+}
+
+function isUsableSource(value: string) {
+  if (!value) return false
+  try {
+    const host = new URL(value).hostname.replace(/^www\./, '')
+    return !['apollo.io'].includes(host) && !(host === 'hunter.io' && value.includes('/search/'))
+  } catch {
+    return false
+  }
+}
+
+function normalizeUrl(value: string) {
+  const trimmed = value.trim()
+  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`
+}
+
+function safeHost(value: string) {
+  try {
+    return new URL(value).hostname.replace(/^www\./, '')
+  } catch {
+    return ''
+  }
+}
+
+function registeredDomain(value: string) {
+  const parts = value.toLowerCase().split('.').filter(Boolean)
+  const suffix = parts.slice(-2).join('.')
+  if (['co.jp', 'ac.jp', 'go.jp', 'ne.jp', 'or.jp', 'co.uk', 'org.uk', 'ac.uk', 'com.au', 'edu.au'].includes(suffix)) {
+    return parts.slice(-3).join('.')
+  }
+  return parts.slice(-2).join('.')
+}
+
+function isObviousMarketMismatch(lead: Lead, targetMarket: string) {
+  const market = targetMarket.trim().toLowerCase()
+  const host = safeHost(lead.organizationWebsite)
+  if (['usa', 'us', 'united states', 'america', 'u.s.', 'u.s.a.'].includes(market) && host.endsWith('.jp')) return true
+  if (['uk', 'united kingdom', 'britain'].includes(market) && host.endsWith('.jp')) return true
+  return false
+}
+
+function cleanOrganizationName(lead: Lead) {
+  const raw = lead.organizationName
+    .replace(/https?:\/\/\S+/gi, ' ')
+    .replace(/\s+[›»]\s+.*$/u, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (!raw || raw.length > 100) {
+    const host = safeHost(lead.organizationWebsite)
+    return host ? host.split('.')[0].replaceAll('-', ' ') : 'Organization'
+  }
+  return raw
+}
+
+function displayHost(value: string) {
+  return safeHost(value) || value
+}
+
+function buildFooter(profile: SenderProfile) {
+  if (profile.language === 'Japanese') {
+    return [
+      '――――――――――――――――',
+      `${profile.senderCompany} ${profile.senderName}`.trim(),
+      profile.senderAddress,
+      `連絡先: ${profile.senderContact}`,
+      '本メールは、貴社が公開している事業者向け連絡先へお送りしています。',
+      '今後のご案内が不要な場合は、その旨をご返信ください。以後のご連絡を停止します。',
+    ].filter(Boolean).join('\n')
+  }
+
+  return [
+    '――――――――――――――――',
+    `${profile.senderCompany} ${profile.senderName}`.trim(),
+    profile.senderAddress,
+    `Contact: ${profile.senderContact}`,
+    'This message was sent to a business contact published on your organization’s website.',
+    'If you do not wish to receive further messages, please reply and we will not contact you again.',
+  ].filter(Boolean).join('\n')
+}
+
+function csvCell(value: unknown) {
+  return `"${String(value ?? '').replaceAll('"', '""')}"`
+}

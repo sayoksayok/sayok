@@ -13,6 +13,28 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+.field-input {
+  min-height: 48px;
+  width: 100%;
+  border: 1px solid #cfd2cc;
+  border-radius: 6px;
+  background: #ffffff;
+  padding: 0 12px;
+  color: #20242b;
+  font-size: 14px;
+  outline: none;
+}
+
+textarea.field-input {
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+
+.field-input:focus {
+  border-color: #2b4c7e;
+  box-shadow: 0 0 0 3px rgba(43, 76, 126, 0.1);
+}
+
 /* Custom animations */
 @keyframes fadeIn {
   from {
