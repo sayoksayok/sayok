@@ -833,13 +833,15 @@ function matchesExcludedLead(lead: Lead, excludedTerms: string[]) {
 }
 
 function resultToLead(result: BraveResult, index: number, input: LeadDiscoveryInput): Lead {
+  const organizationName = cleanTitle(result.title || extractDomain(result.url || '') || `Lead ${index + 1}`)
+  const domain = extractDomain(result.url || '').replace(/^www\./, '')
   return {
     id: `lead_${index + 1}`,
-    organizationName: cleanTitle(result.title || extractDomain(result.url || '') || `Lead ${index + 1}`),
+    organizationName,
     organizationWebsite: normalizeHomepage(result.url || ''),
     category: inferLeadCategory(`${result.title || ''} ${result.description || ''} ${result.url || ''}`),
     country: input.targetMarket,
-    reasonForFit: result.description || `Matched a real web result for: ${input.goal}`,
+    reasonForFit: result.description || `${input.targetMarket}の営業候補として、${domain || organizationName}の公式サイトを公開検索で確認しました。`,
     sourceUrl: result.url || '',
     confidence: 0.5,
     status: 'found',
@@ -851,7 +853,7 @@ function inferLeadCategory(value: string) {
   if (/university|college|school|language program|department/.test(text)) return 'school'
   if (/association|society|organization/.test(text)) return 'association'
   if (/event|conference|expo|summit/.test(text)) return 'event'
-  if (/agency|marketing|consulting/.test(text)) return 'agency'
+  if (/agency|marketing|consulting|広告代理店|広告会社|マーケティング/.test(text)) return 'agency'
   if (/distributor|wholesale|importer|retail/.test(text)) return 'distributor'
   if (/community|club|meetup/.test(text)) return 'community'
   return 'organization'
@@ -1356,9 +1358,15 @@ function clampConfidence(value: number) {
 }
 
 function cleanTitle(title: string) {
-  return title
+  const cleaned = title
     .replace(/\s+\|.*$/, '')
     .replace(/\s+-\s+.*$/, '')
     .replace(/\s+/g, ' ')
     .trim()
+  const companyParts = cleaned
+    .split(/[：:｜|]/)
+    .map((part) => part.trim())
+    .filter((part) => /株式会社|合同会社|有限会社|一般社団法人|公益社団法人/.test(part))
+    .sort((a, b) => a.length - b.length)
+  return companyParts[0] || cleaned
 }

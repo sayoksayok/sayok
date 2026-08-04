@@ -915,7 +915,7 @@ function LeadRow({ item, onExclude }: { item: LeadView; onExclude: () => void })
         <a href={item.lead.organizationWebsite} target="_blank" rel="noreferrer" className="mt-1 inline-flex items-center gap-1 break-all text-xs font-bold text-[#2b4c7e] underline">
           {displayHost(item.lead.organizationWebsite)} <ExternalLink size={12} />
         </a>
-        <p className="mt-3 text-sm leading-6">{item.lead.reasonForFit}</p>
+        <p className="mt-3 text-sm leading-6">{formatReasonForFit(item.lead)}</p>
         <p className="mt-2 text-xs leading-5 text-[#6b7076]">
           根拠: <a href={item.lead.sourceUrl} target="_blank" rel="noreferrer" className="font-bold text-[#2b4c7e] underline">公開ページを確認</a>
         </p>
@@ -1036,11 +1036,26 @@ function cleanOrganizationName(lead: Lead) {
     .replace(/\s+[›»]\s+.*$/u, ' ')
     .replace(/\s+/g, ' ')
     .trim()
+  const companyParts = raw
+    .split(/[：:｜|]/)
+    .map((part) => part.trim())
+    .filter((part) => /株式会社|合同会社|有限会社|一般社団法人|公益社団法人/.test(part))
+    .sort((a, b) => a.length - b.length)
+  if (companyParts[0]) return companyParts[0]
   if (!raw || raw.length > 100) {
     const host = safeHost(lead.organizationWebsite)
     return host ? host.split('.')[0].replaceAll('-', ' ') : 'Organization'
   }
   return raw
+}
+
+function formatReasonForFit(lead: Lead) {
+  const reason = lead.reasonForFit.trim()
+  if (/^Matched a real web result for:/i.test(reason)) {
+    const host = safeHost(lead.organizationWebsite)
+    return `${lead.country}の営業候補として、${host || cleanOrganizationName(lead)}の公式サイトと公開連絡先を確認しました。`
+  }
+  return reason
 }
 
 function displayHost(value: string) {
