@@ -60,7 +60,7 @@ type LeadView = {
 }
 
 const STORAGE_KEY = 'sayok:sales-agent:v1'
-const PROFILE_KEY = 'sayok:sales-profile:v1'
+const PROFILE_KEY = 'sayok:sales-profile:v2'
 const BULK_CONFIRM_ID = '__bulk_send__'
 
 const defaultBulkTemplate: BulkTemplate = {
@@ -76,13 +76,13 @@ const defaultBulkTemplate: BulkTemplate = {
 }
 
 const defaultProfile: SenderProfile = {
-  senderName: '',
-  senderCompany: '',
-  senderAddress: '',
-  senderContact: '',
+  senderName: '石田雄大',
+  senderCompany: 'LOOQ Japan',
+  senderAddress: '〒150-0002 東京都渋谷区渋谷2-19-19 ワコー宮益坂ビル5階',
+  senderContact: 'yudai@looq.icu',
   serviceNote: '',
   tone: 'Professional, concise, and human',
-  language: 'English',
+  language: 'Japanese',
 }
 
 const steps = [
@@ -727,15 +727,17 @@ export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnable
                   <div className="flex flex-col gap-2 border-b border-[#d9dbd5] pb-4 sm:flex-row sm:items-end sm:justify-between">
                     <div>
                       <p className="text-xs font-black tracking-[0.12em] text-[#bc3f34]">差出人情報</p>
-                      <h2 className="mt-1 text-xl font-black">法令対応フッターへ自動挿入</h2>
+                      <h2 className="mt-1 text-xl font-black">法令対応フッターを自動挿入</h2>
                     </div>
-                    <span className="text-xs font-semibold text-[#6b7076]">この端末のブラウザに保存</span>
+                    <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-800">ログイン情報から自動設定済み</span>
                   </div>
+                  <dl className="mt-5 grid gap-px overflow-hidden rounded-md border border-[#d9dbd5] bg-[#d9dbd5] md:grid-cols-2">
+                    <AutoProfileItem label="氏名" value={profile.senderName} />
+                    <AutoProfileItem label="会社名" value={profile.senderCompany} />
+                    <AutoProfileItem label="事業者住所" value={profile.senderAddress} />
+                    <AutoProfileItem label="連絡先" value={profile.senderContact} />
+                  </dl>
                   <div className="mt-5 grid gap-4 md:grid-cols-2">
-                    <Field label="氏名" required><input className="field-input" value={profile.senderName} onChange={(event) => setProfile({ ...profile, senderName: event.target.value })} /></Field>
-                    <Field label="会社名" required><input className="field-input" value={profile.senderCompany} onChange={(event) => setProfile({ ...profile, senderCompany: event.target.value })} /></Field>
-                    <Field label="事業者住所" required><input className="field-input" value={profile.senderAddress} onChange={(event) => setProfile({ ...profile, senderAddress: event.target.value })} /></Field>
-                    <Field label="連絡先メールまたは電話" required><input className="field-input" value={profile.senderContact} onChange={(event) => setProfile({ ...profile, senderContact: event.target.value })} /></Field>
                     <Field label="提案内容の補足"><input className="field-input" value={profile.serviceNote} onChange={(event) => setProfile({ ...profile, serviceNote: event.target.value })} placeholder="例: グループ対応 / 導入支援 / 実績" /></Field>
                     <Field label="メール言語">
                       <select className="field-input" value={profile.language} onChange={(event) => setProfile({ ...profile, language: event.target.value as SenderProfile['language'] })}>
@@ -743,6 +745,10 @@ export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnable
                         <option value="Japanese">日本語</option>
                       </select>
                     </Field>
+                  </div>
+                  <div className="mt-5 rounded-md border border-dashed border-[#b9bdb6] bg-white p-4">
+                    <p className="text-xs font-black tracking-[0.08em] text-[#5f656c]">各メールの末尾へ自動挿入される内容</p>
+                    <div className="mt-3 whitespace-pre-wrap text-xs leading-6 text-[#3f454b]">{buildFooter(profile)}</div>
                   </div>
                 </div>
 
@@ -996,6 +1002,15 @@ function Field({ label, required, children }: { label: string; required?: boolea
       </span>
       {children}
     </label>
+  )
+}
+
+function AutoProfileItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="bg-white p-4">
+      <dt className="text-[11px] font-black tracking-[0.08em] text-[#6b7076]">{label}</dt>
+      <dd className="mt-1 text-sm font-black leading-6 text-[#20242b]">{value}</dd>
+    </div>
   )
 }
 
