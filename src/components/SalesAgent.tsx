@@ -176,7 +176,9 @@ export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnable
   }, [result, targetMarket])
 
   const accepted = leadViews.filter((item) => item.validation.ok && !excludedIds.includes(item.lead.id))
-  const rejected = leadViews.filter((item) => !item.validation.ok || excludedIds.includes(item.lead.id))
+  const visibleProspects = leadViews.filter((item) => !excludedIds.includes(item.lead.id))
+  const needsContact = visibleProspects.filter((item) => !item.validation.ok)
+  const manuallyExcluded = leadViews.filter((item) => excludedIds.includes(item.lead.id))
   const drafted = accepted.filter((item) => Boolean(drafts[item.lead.id]))
   const profileComplete = Boolean(
     profile.senderName.trim()
@@ -380,17 +382,17 @@ export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnable
   function exportCsv() {
     if (!result) return
     const rows = [
-      ['Organization', 'Website', 'Reason', 'Lead source', 'Contact', 'Title', 'Email', 'Email status', 'Email source', 'Draft subject'],
+      ['Organization', 'Website', 'Reason', 'Lead source', 'Contact status', 'Contact', 'Title', 'Email', 'Email source', 'Draft subject'],
       ...leadViews.map((item) => [
         cleanOrganizationName(item.lead),
         item.lead.organizationWebsite,
         item.lead.reasonForFit,
         item.lead.sourceUrl,
+        excludedIds.includes(item.lead.id) ? 'Manually excluded' : item.validation.ok ? 'Verified email' : 'Contact details unconfirmed',
         item.contact?.name || '',
         item.contact?.title || '',
-        item.contact?.email || '',
-        item.contact?.emailStatus || 'not_found',
-        item.contact?.sourceUrl || '',
+        item.validation.ok ? item.contact?.email || '' : '',
+        item.validation.ok ? item.contact?.sourceUrl || '' : '',
         drafts[item.lead.id]?.subject || '',
       ]),
     ]
@@ -569,17 +571,20 @@ export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnable
                   <div className="mt-8">
                     <div className="flex flex-col gap-3 border-b border-[#d9dbd5] pb-4 sm:flex-row sm:items-end sm:justify-between">
                       <div>
-                        <p className="text-xs font-black tracking-[0.12em] text-[#2b4c7e]">送信可能 {accepted.length}件</p>
-                        <h2 className="mt-1 text-2xl font-black">検証できた営業先</h2>
+                        <p className="text-xs font-black tracking-[0.12em] text-[#2b4c7e]">営業先候補 {visibleProspects.length}社</p>
+                        <h2 className="mt-1 text-2xl font-black">日本企業の営業先リスト</h2>
+                        <p className="mt-2 text-sm font-semibold text-[#6b7076]">
+                          メール確認済み {accepted.length}社 ／ 連絡先の確認が必要 {needsContact.length}社
+                        </p>
                       </div>
                       <button type="button" onClick={exportCsv} className="inline-flex items-center gap-2 rounded-md border border-[#d9dbd5] bg-white px-3 py-2 text-sm font-bold hover:border-[#2b4c7e]">
                         <Clipboard size={15} /> CSV
                       </button>
                     </div>
 
-                    {accepted.length ? (
+                    {visibleProspects.length ? (
                       <div className="mt-5 grid gap-4">
-                        {accepted.map((item) => (
+                        {visibleProspects.map((item) => (
                           <LeadRow
                             key={item.lead.id}
                             item={item}
@@ -589,28 +594,26 @@ export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnable
                       </div>
                     ) : (
                       <div className="mt-5 rounded-lg border border-[#d9dbd5] bg-white p-6">
-                        <p className="font-bold">出典付きメールを確認できた候補はありませんでした。</p>
-                        <p className="mt-2 text-sm leading-6 text-[#6b7076]">推測メールは表示しません。条件を広げるか、下の未採用候補の問い合わせページを確認してください。</p>
+                        <p className="font-bold">表示できる営業先候補がありませんでした。</p>
+                        <p className="mt-2 text-sm leading-6 text-[#6b7076]">条件を変えてもう一度検索してください。</p>
                       </div>
                     )}
 
-                    {rejected.length > 0 && (
+                    {manuallyExcluded.length > 0 && (
                       <details className="mt-5 rounded-lg border border-dashed border-[#c9ccc6] bg-[#f8f8f5]">
                         <summary className="cursor-pointer px-4 py-3 text-sm font-bold text-[#5f656c]">
-                          未採用 {rejected.length}件（メール未発見・出典不足・手動除外）
+                          手動で除外した会社 {manuallyExcluded.length}社
                         </summary>
                         <div className="border-t border-[#d9dbd5] px-4 py-2">
-                          {rejected.map((item) => (
+                          {manuallyExcluded.map((item) => (
                             <div key={item.lead.id} className="flex flex-col gap-2 border-b border-[#e2e4df] py-3 last:border-0 sm:flex-row sm:items-center sm:justify-between">
                               <div>
                                 <p className="font-bold">{cleanOrganizationName(item.lead)}</p>
-                                <p className="mt-1 text-xs text-[#6b7076]">{excludedIds.includes(item.lead.id) ? '手動で除外' : item.validation.flags.join(' / ')}</p>
+                                <p className="mt-1 text-xs text-[#6b7076]">手動で除外</p>
                               </div>
                               <div className="flex flex-wrap gap-3 text-xs font-bold">
                                 <a href={item.lead.sourceUrl} target="_blank" rel="noreferrer" className="text-[#2b4c7e] underline">候補の出典</a>
-                                {excludedIds.includes(item.lead.id) && (
-                                  <button type="button" onClick={() => setExcludedIds((ids) => ids.filter((id) => id !== item.lead.id))} className="text-[#bc3f34]">戻す</button>
-                                )}
+                                <button type="button" onClick={() => setExcludedIds((ids) => ids.filter((id) => id !== item.lead.id))} className="text-[#bc3f34]">戻す</button>
                               </div>
                             </div>
                           ))}
@@ -619,7 +622,8 @@ export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnable
                     )}
 
                     {accepted.length > 0 && (
-                      <div className="mt-6 flex justify-end">
+                      <div className="mt-6 flex flex-col items-end gap-2">
+                        <p className="text-xs font-semibold text-[#6b7076]">メール確認済みの会社だけを文面作成へ進めます。</p>
                         <PrimaryButton onClick={() => setStep(3)}>
                           {accepted.length}社の文面を書く <ArrowRight size={17} />
                         </PrimaryButton>
@@ -900,16 +904,21 @@ function MissingStep({ label, onClick }: { label: string; onClick: () => void })
 }
 
 function LeadRow({ item, onExclude }: { item: LeadView; onExclude: () => void }) {
+  const sendable = item.validation.ok
+
   return (
     <article className="grid gap-4 rounded-lg border border-[#d9dbd5] bg-white p-5 md:grid-cols-[auto_minmax(0,1fr)_auto]">
-      <div className="flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#2b4c7e] text-[#2b4c7e]">
-        <ShieldCheck size={20} />
+      <div className={`flex h-11 w-11 items-center justify-center rounded-full border-2 ${sendable ? 'border-[#2b4c7e] text-[#2b4c7e]' : 'border-[#b98027] text-[#9a681d]'}`}>
+        {sendable ? <ShieldCheck size={20} /> : <Mail size={20} />}
       </div>
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <h3 className="text-lg font-black">{cleanOrganizationName(item.lead)}</h3>
           <span className="rounded-full bg-[#eef2f7] px-2 py-1 text-xs font-bold text-[#2b4c7e]">
             {Math.round(item.lead.confidence * 100)}% fit
+          </span>
+          <span className={`rounded-full px-2 py-1 text-xs font-black ${sendable ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800'}`}>
+            {sendable ? 'メール確認済み' : '連絡先未確認'}
           </span>
         </div>
         <a href={item.lead.organizationWebsite} target="_blank" rel="noreferrer" className="mt-1 inline-flex items-center gap-1 break-all text-xs font-bold text-[#2b4c7e] underline">
@@ -920,9 +929,18 @@ function LeadRow({ item, onExclude }: { item: LeadView; onExclude: () => void })
           根拠: <a href={item.lead.sourceUrl} target="_blank" rel="noreferrer" className="font-bold text-[#2b4c7e] underline">公開ページを確認</a>
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <span className="rounded-md border border-[#d9dbd5] bg-[#fbfbf9] px-3 py-2 font-mono text-xs font-bold">{item.contact?.email}</span>
-          {item.validation.flags.map((flag) => <span key={flag} className="rounded-full border border-[#d9dbd5] px-2 py-1 text-[11px] font-bold text-[#5f656c]">{flag}</span>)}
-          <a href={item.contact?.sourceUrl} target="_blank" rel="noreferrer" className="text-xs font-bold text-[#2b4c7e] underline">メール出典</a>
+          {sendable ? (
+            <>
+              <span className="rounded-md border border-[#d9dbd5] bg-[#fbfbf9] px-3 py-2 font-mono text-xs font-bold">{item.contact?.email}</span>
+              {item.validation.flags.map((flag) => <span key={flag} className="rounded-full border border-[#d9dbd5] px-2 py-1 text-[11px] font-bold text-[#5f656c]">{flag}</span>)}
+              {item.contact?.sourceUrl && <a href={item.contact.sourceUrl} target="_blank" rel="noreferrer" className="text-xs font-bold text-[#2b4c7e] underline">メール出典</a>}
+            </>
+          ) : (
+            <>
+              <span className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900">公開メールは未確認</span>
+              <a href={item.lead.organizationWebsite} target="_blank" rel="noreferrer" className="text-xs font-bold text-[#2b4c7e] underline">公式サイトで問い合わせ先を確認</a>
+            </>
+          )}
         </div>
       </div>
       <button type="button" onClick={onExclude} className="self-start rounded-md border border-[#d9dbd5] px-3 py-2 text-xs font-bold text-[#6b7076] hover:border-[#bc3f34] hover:text-[#bc3f34]">
