@@ -43,6 +43,11 @@ type Draft = {
   state: 'ready' | 'sending' | 'sent'
 }
 
+type BulkTemplate = {
+  subject: string
+  body: string
+}
+
 type Validation = {
   ok: boolean
   flags: string[]
@@ -56,6 +61,19 @@ type LeadView = {
 
 const STORAGE_KEY = 'sayok:sales-agent:v1'
 const PROFILE_KEY = 'sayok:sales-profile:v1'
+const BULK_CONFIRM_ID = '__bulk_send__'
+
+const defaultBulkTemplate: BulkTemplate = {
+  subject: '{{会社名}}様へのご提案',
+  body: `{{宛名}}
+
+突然のご連絡失礼いたします。{{自社名}}の{{差出人名}}と申します。
+
+貴社の公開情報を拝見し、{{提案内容}}がお役に立てる可能性があると考え、ご連絡しました。
+
+まずは15分ほど、現在のお取り組みや課題について情報交換できないでしょうか。
+ご担当が別の方でしたら、適切な窓口をご教示いただけますと幸いです。`,
+}
 
 const defaultProfile: SenderProfile = {
   senderName: '',
@@ -93,6 +111,7 @@ export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnable
   const [result, setResult] = useState<LeadDiscoveryResult | null>(null)
   const [profile, setProfile] = useState<SenderProfile>(defaultProfile)
   const [drafts, setDrafts] = useState<Record<string, Draft>>({})
+  const [bulkTemplate, setBulkTemplate] = useState<BulkTemplate>(defaultBulkTemplate)
   const [excludedIds, setExcludedIds] = useState<string[]>([])
   const [busy, setBusy] = useState('')
   const [draftingId, setDraftingId] = useState('')
@@ -123,6 +142,7 @@ export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnable
           count?: number
           result?: LeadDiscoveryResult
           drafts?: Record<string, Draft>
+          bulkTemplate?: BulkTemplate
           excludedIds?: string[]
         }
         if (saved.step && saved.step >= 1 && saved.step <= 4) setStep(saved.step)
@@ -134,6 +154,7 @@ export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnable
         if (saved.count && [5, 8, 10, 14].includes(saved.count)) setCount(saved.count)
         setResult(saved.result || null)
         setDrafts(saved.drafts || {})
+        setBulkTemplate({ ...defaultBulkTemplate, ...saved.bulkTemplate })
         setExcludedIds(saved.excludedIds || [])
       }
     } catch {
@@ -160,9 +181,10 @@ export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnable
       count,
       result,
       drafts,
+      bulkTemplate,
       excludedIds,
     }))
-  }, [hydrated, step, siteUrl, analysis, targetMarket, goal, hint, count, result, drafts, excludedIds])
+  }, [hydrated, step, siteUrl, analysis, targetMarket, goal, hint, count, result, drafts, bulkTemplate, excludedIds])
 
   const leadViews = useMemo(() => {
     if (!result) return []
@@ -180,6 +202,7 @@ export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnable
   const needsContact = visibleProspects.filter((item) => !item.validation.ok)
   const manuallyExcluded = leadViews.filter((item) => excludedIds.includes(item.lead.id))
   const drafted = accepted.filter((item) => Boolean(drafts[item.lead.id]))
+  const readyToSend = drafted.filter((item) => drafts[item.lead.id]?.state === 'ready')
   const profileComplete = Boolean(
     profile.senderName.trim()
     && profile.senderCompany.trim()
@@ -307,14 +330,39 @@ export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnable
     setBusy('')
   }
 
-  async function sendEmail(item: LeadView) {
+  function applyBulkTemplate() {
+    if (!bulkTemplate.subject.trim() || !bulkTemplate.body.trim()) {
+      setError('一括テンプレの件名と本文を入力してください。')
+      return
+    }
+
+    const inferredLanguage: SenderProfile['language'] = /[ぁ-んァ-ヶ一-龠々]/.test(bulkTemplate.body) ? 'Japanese' : 'English'
+    if (profile.language !== inferredLanguage) setProfile((current) => ({ ...current, language: inferredLanguage }))
+    const targets = accepted.filter((item) => drafts[item.lead.id]?.state !== 'sent')
+    setDrafts((current) => {
+      const next = { ...current }
+      for (const item of targets) {
+        next[item.lead.id] = {
+          subject: personalizeTemplate(bulkTemplate.subject, item, profile, analysis),
+          body: personalizeTemplate(bulkTemplate.body, item, profile, analysis),
+          state: 'ready',
+        }
+      }
+      return next
+    })
+    setError('')
+    setNotice(`${targets.length}社分の宛名・会社名を差し替えて、テンプレを反映しました。`)
+  }
+
+  async function sendEmail(item: LeadView, options?: { silent?: boolean }): Promise<string | null> {
     const contact = item.contact
     const draft = drafts[item.lead.id]
-    if (!contact?.email || !draft) return
+    if (!contact?.email || !draft) return '宛先または下書きがありません。'
     if (!gmailConnected) {
-      setError('送信前にGmail送信権限を再接続してください。')
+      const message = '送信前にGmail送信権限を再接続してください。'
+      if (!options?.silent) setError(message)
       setConfirmId('')
-      return
+      return message
     }
 
     const fullBody = `${draft.body}\n\n${buildFooter(profile)}`
@@ -346,15 +394,42 @@ export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnable
         ...current,
         [item.lead.id]: { ...draft, state: 'sent' },
       }))
-      setNotice(`${cleanOrganizationName(item.lead)} へ ${userEmail} から送信しました。`)
+      if (!options?.silent) setNotice(`${cleanOrganizationName(item.lead)} へ ${userEmail} から送信しました。`)
       setConfirmId('')
+      return null
     } catch (err) {
       setDrafts((current) => ({
         ...current,
         [item.lead.id]: { ...draft, state: 'ready' },
       }))
-      setError(err instanceof Error ? err.message : 'Gmail送信に失敗しました。')
+      const message = err instanceof Error ? err.message : 'Gmail送信に失敗しました。'
+      if (!options?.silent) setError(message)
+      return message
     }
+  }
+
+  async function sendAllReadyEmails() {
+    if (!gmailConnected) {
+      setError('送信前にGmail送信権限を再接続してください。')
+      setConfirmId('')
+      return
+    }
+    if (!readyToSend.length) return
+
+    setBusy('send-all')
+    setError('')
+    setNotice('')
+    setConfirmId('')
+    let sent = 0
+    const failures: string[] = []
+    for (const item of readyToSend) {
+      const failure = await sendEmail(item, { silent: true })
+      if (failure) failures.push(`${cleanOrganizationName(item.lead)}: ${failure}`)
+      else sent += 1
+    }
+    setBusy('')
+    if (sent) setNotice(`${sent}通を ${userEmail} から送信しました。`)
+    if (failures.length) setError(`${failures.length}通を送信できませんでした。${failures.join(' / ')}`)
   }
 
   function resetWorkspace() {
@@ -368,6 +443,7 @@ export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnable
     setHint('')
     setResult(null)
     setDrafts({})
+    setBulkTemplate(defaultBulkTemplate)
     setExcludedIds([])
     setError('')
     setNotice('')
@@ -640,8 +716,8 @@ export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnable
           <section>
             <SectionHeading
               eyebrow="STEP 3"
-              title="会社ごとに、送れる文面を作る。"
-              copy="相手を選んだ根拠を冒頭に使い、定型文に見えない短いメールを作成します。内容はすべて編集できます。"
+              title="一つのテンプレを、全員分の文面にする。"
+              copy="共通テンプレの宛名と会社名を自動で差し替えます。会社ごとの編集や、AIによる個別文面の作成もできます。"
             />
             {!accepted.length ? (
               <MissingStep onClick={() => setStep(2)} label="先に出典付きの営業先を見つけてください。" />
@@ -667,6 +743,44 @@ export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnable
                         <option value="Japanese">日本語</option>
                       </select>
                     </Field>
+                  </div>
+                </div>
+
+                <div className="mt-7 rounded-lg border-2 border-[#2b4c7e] bg-white p-5">
+                  <div className="flex flex-col gap-2 border-b border-[#d9dbd5] pb-4 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                      <p className="text-xs font-black tracking-[0.12em] text-[#2b4c7e]">一括テンプレ</p>
+                      <h2 className="mt-1 text-xl font-black">送信可能な{accepted.length}社すべてに反映</h2>
+                    </div>
+                    <p className="text-xs font-semibold text-[#6b7076]">送信済みのメールは上書きしません</p>
+                  </div>
+                  <div className="mt-5 grid gap-4">
+                    <Field label="共通件名" required>
+                      <input
+                        className="field-input"
+                        value={bulkTemplate.subject}
+                        onChange={(event) => setBulkTemplate({ ...bulkTemplate, subject: event.target.value })}
+                      />
+                    </Field>
+                    <Field label="共通本文" required>
+                      <textarea
+                        className="field-input min-h-64 resize-y leading-7"
+                        value={bulkTemplate.body}
+                        onChange={(event) => setBulkTemplate({ ...bulkTemplate, body: event.target.value })}
+                      />
+                    </Field>
+                  </div>
+                  <div className="mt-4 rounded-md bg-[#f2f5f9] p-4 text-xs font-semibold leading-6 text-[#46566d]">
+                    自動差し替え： <code>{'{{宛名}}'}</code> <code>{'{{会社名}}'}</code> <code>{'{{差出人名}}'}</code> <code>{'{{自社名}}'}</code> <code>{'{{提案内容}}'}</code>
+                    <br />宛名が見つからない場合は「会社名 ご担当者様」にします。
+                  </div>
+                  <div className="mt-5 flex justify-end">
+                    <PrimaryButton
+                      onClick={applyBulkTemplate}
+                      disabled={!bulkTemplate.subject.trim() || !bulkTemplate.body.trim() || !profile.senderName.trim() || !profile.senderCompany.trim()}
+                    >
+                      <FilePenLine size={17} /> {accepted.length}社分を一括作成
+                    </PrimaryButton>
                   </div>
                 </div>
 
@@ -769,6 +883,36 @@ export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnable
                     </button>
                   )}
                 </div>
+                {readyToSend.length > 0 && (
+                  <div className="rounded-lg border-2 border-[#2b4c7e] bg-[#eef2f7] p-5">
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="text-xs font-black tracking-[0.12em] text-[#2b4c7e]">一括送信</p>
+                        <h2 className="mt-1 text-xl font-black">未送信の{readyToSend.length}通をまとめて送る</h2>
+                        <p className="mt-2 text-xs font-semibold text-[#5f656c]">各メールは別々の宛先へ送信されます。CC・BCCでの一斉送信ではありません。</p>
+                      </div>
+                      {confirmId !== BULK_CONFIRM_ID && (
+                        <PrimaryButton onClick={() => setConfirmId(BULK_CONFIRM_ID)} disabled={!gmailConnected || busy === 'send-all'}>
+                          <Mail size={17} /> 全{readyToSend.length}通を最終確認
+                        </PrimaryButton>
+                      )}
+                    </div>
+                    {confirmId === BULK_CONFIRM_ID && (
+                      <div className="mt-4 flex flex-col gap-3 rounded-md border border-[#bc3f34] bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <p className="text-sm font-black">この承認で{readyToSend.length}通の実メールを順番に送信します。</p>
+                          <p className="mt-1 text-xs font-bold text-[#6b4a46]">宛先・件名・本文を下の一覧で確認してください。送信後は取り消せません。</p>
+                        </div>
+                        <div className="flex shrink-0 gap-2">
+                          <SecondaryButton onClick={() => setConfirmId('')}>戻る</SecondaryButton>
+                          <PrimaryButton onClick={() => void sendAllReadyEmails()} disabled={busy === 'send-all'}>
+                            <Send size={16} /> {busy === 'send-all' ? '順番に送信中…' : `${readyToSend.length}通を承認して送信`}
+                          </PrimaryButton>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
                 {drafted.map((item) => {
                   const draft = drafts[item.lead.id]
                   const contact = item.contact
@@ -796,8 +940,8 @@ export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnable
                         <SecondaryButton onClick={() => copyText(item.lead.id, fullEmail)}>
                           <Clipboard size={15} /> {copied === item.lead.id ? 'コピー済み' : '本文をコピー'}
                         </SecondaryButton>
-                        {draft.state !== 'sent' && draft.state !== 'sending' && confirmId !== item.lead.id && (
-                          <PrimaryButton onClick={() => setConfirmId(item.lead.id)} disabled={!gmailConnected}>
+                        {draft.state !== 'sent' && draft.state !== 'sending' && confirmId !== item.lead.id && confirmId !== BULK_CONFIRM_ID && (
+                          <PrimaryButton onClick={() => setConfirmId(item.lead.id)} disabled={!gmailConnected || busy === 'send-all'}>
                             <Mail size={17} /> 送信内容を最終確認
                           </PrimaryButton>
                         )}
@@ -1065,6 +1209,36 @@ function cleanOrganizationName(lead: Lead) {
     return host ? host.split('.')[0].replaceAll('-', ' ') : 'Organization'
   }
   return raw
+}
+
+function personalizeTemplate(
+  template: string,
+  item: LeadView,
+  profile: SenderProfile,
+  analysis: SiteAnalysis | null,
+) {
+  const company = cleanOrganizationName(item.lead)
+  const contactName = item.contact?.name?.trim() || ''
+  const useJapaneseHonorific = /[ぁ-んァ-ヶ一-龠々]/.test(template)
+  const hasNamedContact = Boolean(
+    contactName
+    && contactName.length <= 80
+    && !/^(contact|info|inquiry|sales|support|team|担当者|ご担当者|窓口)$/i.test(contactName),
+  )
+  const recipient = hasNamedContact
+    ? useJapaneseHonorific
+      ? contactName.endsWith('様') ? contactName : `${contactName} 様`
+      : contactName
+    : useJapaneseHonorific
+      ? `${company} ご担当者様`
+      : `${company} team`
+
+  return template
+    .replaceAll('{{宛名}}', recipient)
+    .replaceAll('{{会社名}}', company)
+    .replaceAll('{{差出人名}}', profile.senderName.trim())
+    .replaceAll('{{自社名}}', profile.senderCompany.trim())
+    .replaceAll('{{提案内容}}', analysis?.offering?.trim() || profile.serviceNote.trim() || '弊社サービス')
 }
 
 function formatReasonForFit(lead: Lead) {
