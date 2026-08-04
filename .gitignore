@@ -39,6 +39,10 @@ yarn-error.log*
 # vercel
 .vercel
 
+# Local sales agent credentials, campaign data, and outreach history
+.env.sales-agent.local
+/sales-agent/private/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

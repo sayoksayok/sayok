@@ -1,0 +1,28 @@
+{
+  "campaigns": [
+    {
+      "id": "service-id",
+      "name": "Service name",
+      "enabled": false,
+      "senderName": "Your name",
+      "senderTitle": "Your role",
+      "senderCompany": "Your company",
+      "senderEmail": "you@company.com",
+      "gmailRefreshTokenEnv": "GMAIL_REFRESH_TOKEN_SERVICE_ID",
+      "website": "https://company.com",
+      "offer": "A concise description of this service only.",
+      "proof": ["Relevant proof for this service only"],
+      "targetMarket": "United States",
+      "searchLanguage": "en",
+      "searchCountry": "US",
+      "targetRoles": ["Founder", "Head of Partnerships"],
+      "searchQueries": ["target category partnership contact"],
+      "excludeDomains": ["existing-client.com", "competitor.com"],
+      "excludeOrganizations": ["Existing Client"],
+      "cta": "Would a short introductory call next week be useful?",
+      "calendarUrl": "https://calendly.com/example/30min",
+      "language": "English",
+      "dailyLimit": 3
+    }
+  ]
+}
