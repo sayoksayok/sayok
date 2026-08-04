@@ -1244,6 +1244,7 @@ function isObviousMarketMismatch(lead: Lead, targetMarket: string) {
 function cleanOrganizationName(lead: Lead) {
   const raw = lead.organizationName
     .replace(/https?:\/\/\S+/gi, ' ')
+    .replace(/\s+https?\s*$/i, ' ')
     .replace(/\s+[›»]\s+.*$/u, ' ')
     .replace(/\s+/g, ' ')
     .trim()
@@ -1272,7 +1273,7 @@ function personalizeTemplate(
   const hasNamedContact = Boolean(
     contactName
     && contactName.length <= 80
-    && !/^(contact|info|inquiry|sales|support|team|担当者|ご担当者|窓口)$/i.test(contactName),
+    && !/^(public contact|unknown contact|general contact|relevant business contact|contact|info|inquiry|sales|support|team|担当者|ご担当者|窓口)$/i.test(contactName),
   )
   const recipient = hasNamedContact
     ? useJapaneseHonorific
