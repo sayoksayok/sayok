@@ -124,7 +124,7 @@ export default function SalesAgentGate() {
     const { error: signInError } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: getAuthCallbackUrl('/'),
+        redirectTo: getAuthCallbackUrl(),
         scopes: [
           'email',
           'profile',
