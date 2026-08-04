@@ -959,6 +959,9 @@ function contactPageUrls(homepage: string, sourceUrl?: string) {
       `${origin}/contact`,
       `${origin}/contact-us`,
       `${origin}/about`,
+      `${origin}/privacy`,
+      `${origin}/privacy-policy`,
+      `${origin}/privacypolicy`,
     ].filter(Boolean)
     return [...new Set(urls)]
   } catch {
