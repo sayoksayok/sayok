@@ -88,10 +88,11 @@ export async function POST(request: NextRequest) {
       connectionLookup.data as SalesAgentGoogleConnection,
     )
     const attachment = await loadPitchDeck()
+    const messageBody = prepareSalesEmailBody(input!.body!.trim())
     const sent = await sendSalesEmail(accessToken, {
       to,
       subject: input!.subject!.trim(),
-      body: input!.body!.trim(),
+      body: messageBody,
       attachments: [attachment],
     })
     const sentAt = new Date().toISOString()
@@ -158,6 +159,31 @@ async function loadPitchDeck() {
     throw new Error('LOOQサービス資料がPDFではありません。送信を停止しました。')
   }
   return { ...pitchDeck, content }
+}
+
+function prepareSalesEmailBody(value: string) {
+  const footerMarker = '\n\n――――'
+  const footerIndex = value.indexOf(footerMarker)
+  const footer = footerIndex >= 0 ? value.slice(footerIndex) : ''
+  const main = (footerIndex >= 0 ? value.slice(0, footerIndex) : value)
+    .trim()
+    .replace(/\n+\s*石田雄大\s*\n+\s*LOOQ Japan\s*$/u, '')
+    .trim()
+  const japanese = /[ぁ-んァ-ヶ一-龠々]/.test(main)
+  const additions = [
+    main.includes('https://www.looq.jp/')
+      ? ''
+      : japanese
+        ? 'LOOQ Japan ウェブサイト：\nhttps://www.looq.jp/'
+        : 'LOOQ Japan website:\nhttps://www.looq.jp/',
+    main.includes(pitchDeck.filename)
+      ? ''
+      : japanese
+        ? `サービス資料「${pitchDeck.filename}」も添付しておりますので、あわせてご覧ください。`
+        : `I have also attached our service deck, ${pitchDeck.filename}, for reference.`,
+  ].filter(Boolean)
+  const normalizedMain = additions.length ? `${main}\n\n${additions.join('\n\n')}` : main
+  return `${normalizedMain}${footer}`
 }
 
 function validateSendInput(input: SendInput | null) {

@@ -164,7 +164,10 @@ export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnable
         setHint(saved.hint || '')
         if (saved.count && [5, 8, 10, 14].includes(saved.count)) setCount(saved.count)
         setResult(saved.result || null)
-        setDrafts(saved.drafts || {})
+        setDrafts(Object.fromEntries(Object.entries(saved.drafts || {}).map(([leadId, draft]) => [
+          leadId,
+          { ...draft, body: prepareSalesBody(draft.body) },
+        ])))
         setBulkTemplate(saved.bulkTemplateVersion === BULK_TEMPLATE_VERSION
           ? { ...defaultBulkTemplate, ...saved.bulkTemplate }
           : defaultBulkTemplate)
@@ -379,7 +382,7 @@ export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnable
       return message
     }
 
-    const fullBody = `${draft.body}\n\n${buildFooter(profile)}`
+    const fullBody = `${prepareSalesBody(draft.body)}\n\n${buildFooter(profile)}`
     setDrafts((current) => ({
       ...current,
       [item.lead.id]: { ...draft, state: 'sending' },
@@ -940,7 +943,7 @@ export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnable
                 {drafted.map((item) => {
                   const draft = drafts[item.lead.id]
                   const contact = item.contact
-                  const fullEmail = `${draft.body}\n\n${buildFooter(profile)}`
+                  const fullEmail = `${prepareSalesBody(draft.body)}\n\n${buildFooter(profile)}`
                   return (
                     <article key={item.lead.id} className="rounded-lg border border-[#d9dbd5] bg-white p-5">
                       <div className="flex flex-col gap-3 border-b border-[#e2e4df] pb-4 sm:flex-row sm:items-start sm:justify-between">
@@ -1288,6 +1291,27 @@ function formatReasonForFit(lead: Lead) {
 
 function displayHost(value: string) {
   return safeHost(value) || value
+}
+
+function prepareSalesBody(value: string) {
+  const body = value
+    .trim()
+    .replace(/\n+\s*石田雄大\s*\n+\s*LOOQ Japan\s*$/u, '')
+    .trim()
+  const japanese = /[ぁ-んァ-ヶ一-龠々]/.test(body)
+  const additions = [
+    body.includes('https://www.looq.jp/')
+      ? ''
+      : japanese
+        ? 'LOOQ Japan ウェブサイト：\nhttps://www.looq.jp/'
+        : 'LOOQ Japan website:\nhttps://www.looq.jp/',
+    body.includes('LOOQ_pitchdeck_JP.pdf')
+      ? ''
+      : japanese
+        ? 'サービス資料「LOOQ_pitchdeck_JP.pdf」も添付しておりますので、あわせてご覧ください。'
+        : 'I have also attached our service deck, LOOQ_pitchdeck_JP.pdf, for reference.',
+  ].filter(Boolean)
+  return additions.length ? `${body}\n\n${additions.join('\n\n')}` : body
 }
 
 function buildFooter(profile: SenderProfile) {
