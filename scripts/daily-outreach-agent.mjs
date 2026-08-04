@@ -241,15 +241,43 @@ async function gmailAccessToken(campaign) {
   return data.access_token;
 }
 
+async function assertGmailSender(token, campaign) {
+  const [profile, settings] = await Promise.all([
+    fetchJson("https://gmail.googleapis.com/gmail/v1/users/me/profile", {
+      headers: { Authorization: `Bearer ${token}` }
+    }),
+    fetchJson("https://gmail.googleapis.com/gmail/v1/users/me/settings/sendAs", {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+  ]);
+  const expected = campaign.senderEmail.toLowerCase();
+  const permitted = new Set([
+    String(profile.emailAddress || "").toLowerCase(),
+    ...(settings.sendAs || [])
+      .filter((entry) => entry.verificationStatus === "accepted")
+      .map((entry) => String(entry.sendAsEmail || "").toLowerCase())
+  ]);
+  if (!permitted.has(expected)) {
+    throw new Error(`${campaign.name} must send from ${campaign.senderEmail}; the connected Gmail account does not permit that From address.`);
+  }
+}
+
+function encodedSubject(value) {
+  return `=?UTF-8?B?${Buffer.from(value, "utf8").toString("base64")}?=`;
+}
+
 async function sendGmail(campaign, lead, draft) {
   const token = await gmailAccessToken(campaign);
+  await assertGmailSender(token, campaign);
   const displayName = [lead.firstName, lead.lastName].filter(Boolean).join(" ");
-  const greeting = displayName ? `Hi ${displayName},` : "Hi,";
+  const greeting = campaign.language === "Japanese"
+    ? (displayName ? `${displayName}様` : "ご担当者様")
+    : (displayName ? `Hi ${displayName},` : "Hi,");
   const body = `${greeting}\n\n${draft.body}\n\n${emailFooter(campaign)}`;
   const raw = [
     `From: ${campaign.senderName} <${campaign.senderEmail}>`,
     `To: ${lead.email}`,
-    `Subject: ${draft.subject}`,
+    `Subject: ${encodedSubject(draft.subject)}`,
     "MIME-Version: 1.0",
     "Content-Type: text/plain; charset=UTF-8",
     "Content-Transfer-Encoding: 8bit",
