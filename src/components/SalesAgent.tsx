@@ -7,6 +7,7 @@ import {
   Clipboard,
   ExternalLink,
   FilePenLine,
+  History,
   LogOut,
   Mail,
   Paperclip,
@@ -58,6 +59,17 @@ type LeadView = {
   lead: Lead
   contact: Contact | null
   validation: Validation
+}
+
+type SendHistoryItem = {
+  id: string
+  organization: string
+  toEmail: string
+  subject: string
+  sourceUrl: string
+  sentAt: string
+  fromEmail: string
+  gmailMessageId: string
 }
 
 const STORAGE_KEY = 'sayok:sales-agent:v1'
@@ -134,6 +146,11 @@ export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnable
   const [confirmId, setConfirmId] = useState('')
   const [copied, setCopied] = useState('')
   const [hydrated, setHydrated] = useState(false)
+  const [sendHistory, setSendHistory] = useState<SendHistoryItem[]>([])
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const [historyBusy, setHistoryBusy] = useState(true)
+  const [historyError, setHistoryError] = useState('')
+  const [historyRefreshKey, setHistoryRefreshKey] = useState(0)
 
   useEffect(() => {
     try {
@@ -207,6 +224,40 @@ export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnable
     }))
   }, [hydrated, step, siteUrl, analysis, targetMarket, goal, hint, count, result, drafts, bulkTemplate, excludedIds])
 
+  useEffect(() => {
+    if (!hydrated) return
+    if (!supabase) {
+      setHistoryBusy(false)
+      setHistoryError('送信履歴を確認できないため、営業メールの作成を停止しています。')
+      return
+    }
+    let cancelled = false
+    setHistoryBusy(true)
+    setHistoryError('')
+
+    void (async () => {
+      try {
+        const { data } = await supabase.auth.getSession()
+        const token = data.session?.access_token
+        if (!token) throw new Error('送信履歴を取得するには再ログインしてください。')
+        const response = await fetch('/api/sales-agent/history', {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        const result = (await response.json()) as { items?: SendHistoryItem[]; error?: string }
+        if (!response.ok) throw new Error(result.error || '送信履歴を取得できませんでした。')
+        if (!cancelled) setSendHistory(result.items || [])
+      } catch (err) {
+        if (!cancelled) setHistoryError(err instanceof Error ? err.message : '送信履歴を取得できませんでした。')
+      } finally {
+        if (!cancelled) setHistoryBusy(false)
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [hydrated, historyRefreshKey])
+
   const leadViews = useMemo(() => {
     if (!result) return []
     return result.leads.map((lead) => {
@@ -218,9 +269,18 @@ export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnable
     })
   }, [result, targetMarket])
 
-  const accepted = leadViews.filter((item) => item.validation.ok && !excludedIds.includes(item.lead.id))
+  const sentHistoryByEmail = useMemo(
+    () => new Map(sendHistory.map((item) => [item.toEmail.trim().toLowerCase(), item])),
+    [sendHistory],
+  )
+  const accepted = historyBusy || historyError ? [] : leadViews.filter((item) => (
+    item.validation.ok
+    && !excludedIds.includes(item.lead.id)
+    && !getSentHistory(item, sentHistoryByEmail)
+  ))
   const visibleProspects = leadViews.filter((item) => !excludedIds.includes(item.lead.id))
   const needsContact = visibleProspects.filter((item) => !item.validation.ok)
+  const sentProspects = visibleProspects.filter((item) => Boolean(getSentHistory(item, sentHistoryByEmail)))
   const manuallyExcluded = leadViews.filter((item) => excludedIds.includes(item.lead.id))
   const drafted = accepted.filter((item) => Boolean(drafts[item.lead.id]))
   const readyToSend = drafted.filter((item) => drafts[item.lead.id]?.state === 'ready')
@@ -415,6 +475,7 @@ export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnable
         ...current,
         [item.lead.id]: { ...draft, state: 'sent' },
       }))
+      setHistoryRefreshKey((key) => key + 1)
       if (!options?.silent) setNotice(`${cleanOrganizationName(item.lead)} へ ${userEmail} から送信しました。`)
       setConfirmId('')
       return null
@@ -525,6 +586,17 @@ export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnable
             </div>
             <button
               type="button"
+              onClick={() => setHistoryOpen((open) => !open)}
+              className={`inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-xs font-bold ${
+                historyOpen
+                  ? 'border-[#2b4c7e] bg-[#eef2f7] text-[#2b4c7e]'
+                  : 'border-[#d9dbd5] bg-white text-[#4f555c] hover:border-[#2b4c7e]'
+              }`}
+            >
+              <History size={15} /> 送信履歴 {historyBusy ? '…' : sendHistory.length}
+            </button>
+            <button
+              type="button"
               onClick={resetWorkspace}
               className="rounded-md border border-[#d9dbd5] bg-white px-3 py-2 text-xs font-bold text-[#4f555c] hover:border-[#2b4c7e]"
             >
@@ -568,6 +640,15 @@ export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnable
       <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
         {error && <Alert tone="error" onClose={() => setError('')}>{error}</Alert>}
         {notice && <Alert tone="success" onClose={() => setNotice('')}>{notice}</Alert>}
+        {historyOpen && (
+          <SendHistoryPanel
+            items={sendHistory}
+            busy={historyBusy}
+            error={historyError}
+            onRefresh={() => setHistoryRefreshKey((key) => key + 1)}
+            onClose={() => setHistoryOpen(false)}
+          />
+        )}
 
         {step === 1 && (
           <section>
@@ -671,7 +752,11 @@ export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnable
                         <p className="text-xs font-black tracking-[0.12em] text-[#2b4c7e]">営業先候補 {visibleProspects.length}社</p>
                         <h2 className="mt-1 text-2xl font-black">日本企業の営業先リスト</h2>
                         <p className="mt-2 text-sm font-semibold text-[#6b7076]">
-                          メール確認済み {accepted.length}社 ／ 連絡先の確認が必要 {needsContact.length}社
+                          {historyBusy
+                            ? '送信履歴と照合中…'
+                            : historyError
+                              ? '送信履歴を確認できないため、文面作成と送信を停止しています。'
+                              : `未送信・メール確認済み ${accepted.length}社 ／ 送信済み ${sentProspects.length}社 ／ 連絡先の確認が必要 ${needsContact.length}社`}
                         </p>
                       </div>
                       <button type="button" onClick={exportCsv} className="inline-flex items-center gap-2 rounded-md border border-[#d9dbd5] bg-white px-3 py-2 text-sm font-bold hover:border-[#2b4c7e]">
@@ -685,6 +770,7 @@ export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnable
                           <LeadRow
                             key={item.lead.id}
                             item={item}
+                            sentRecord={getSentHistory(item, sentHistoryByEmail)}
                             onExclude={() => setExcludedIds((ids) => [...ids, item.lead.id])}
                           />
                         ))}
@@ -720,7 +806,7 @@ export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnable
 
                     {accepted.length > 0 && (
                       <div className="mt-6 flex flex-col items-end gap-2">
-                        <p className="text-xs font-semibold text-[#6b7076]">メール確認済みの会社だけを文面作成へ進めます。</p>
+                        <p className="text-xs font-semibold text-[#6b7076]">公開メールを確認でき、かつ過去に送信していない会社だけを文面作成へ進めます。</p>
                         <PrimaryButton onClick={() => setStep(3)}>
                           {accepted.length}社の文面を書く <ArrowRight size={17} />
                         </PrimaryButton>
@@ -1096,13 +1182,78 @@ function MissingStep({ label, onClick }: { label: string; onClick: () => void })
   )
 }
 
-function LeadRow({ item, onExclude }: { item: LeadView; onExclude: () => void }) {
-  const sendable = item.validation.ok
+function SendHistoryPanel({
+  items,
+  busy,
+  error,
+  onRefresh,
+  onClose,
+}: {
+  items: SendHistoryItem[]
+  busy: boolean
+  error: string
+  onRefresh: () => void
+  onClose: () => void
+}) {
+  return (
+    <section className="mb-8 rounded-lg border-2 border-[#2b4c7e] bg-white p-5" aria-label="営業メール送信履歴">
+      <div className="flex flex-col gap-3 border-b border-[#d9dbd5] pb-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-xs font-black tracking-[0.14em] text-[#2b4c7e]">再送防止リスト</p>
+          <h2 className="mt-1 text-2xl font-black">SayOKから送信済みの営業先</h2>
+          <p className="mt-2 text-xs font-semibold text-[#6b7076]">このメールアドレスは候補検索と送信時の両方で自動的に除外されます。</p>
+        </div>
+        <div className="flex gap-2">
+          <button type="button" onClick={onRefresh} disabled={busy} className="inline-flex items-center gap-2 rounded-md border border-[#d9dbd5] px-3 py-2 text-xs font-bold text-[#4f555c] hover:border-[#2b4c7e] disabled:opacity-50">
+            <RefreshCw size={14} className={busy ? 'animate-spin' : ''} /> 更新
+          </button>
+          <button type="button" onClick={onClose} aria-label="送信履歴を閉じる" className="rounded-md border border-[#d9dbd5] p-2 text-[#4f555c] hover:border-[#bc3f34] hover:text-[#bc3f34]">
+            <X size={16} />
+          </button>
+        </div>
+      </div>
+
+      {busy ? (
+        <p className="py-8 text-center text-sm font-bold text-[#6b7076]">送信履歴を読み込んでいます…</p>
+      ) : error ? (
+        <div className="mt-4 rounded-md border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-800">{error}</div>
+      ) : items.length === 0 ? (
+        <p className="py-8 text-center text-sm font-bold text-[#6b7076]">SayOKから送信した営業メールはまだありません。</p>
+      ) : (
+        <div className="mt-4 grid gap-3">
+          {items.map((item) => (
+            <article key={item.id} className="rounded-md border border-[#d9dbd5] bg-[#fbfbf9] p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-black text-emerald-800">送信済み・再送対象外</span>
+                    <time className="text-xs font-bold text-[#6b7076]" dateTime={item.sentAt}>{formatTokyoDate(item.sentAt)}</time>
+                  </div>
+                  <h3 className="mt-2 text-lg font-black">{item.organization}</h3>
+                  <p className="mt-1 break-all font-mono text-xs font-bold text-[#2b4c7e]">{item.toEmail}</p>
+                  <p className="mt-3 text-sm font-bold">{item.subject || '件名なし'}</p>
+                </div>
+                {item.sourceUrl && (
+                  <a href={item.sourceUrl} target="_blank" rel="noreferrer" className="inline-flex shrink-0 items-center gap-1 text-xs font-bold text-[#2b4c7e] underline">
+                    連絡先の出典 <ExternalLink size={12} />
+                  </a>
+                )}
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
+  )
+}
+
+function LeadRow({ item, sentRecord, onExclude }: { item: LeadView; sentRecord?: SendHistoryItem; onExclude: () => void }) {
+  const sendable = item.validation.ok && !sentRecord
 
   return (
     <article className="grid gap-4 rounded-lg border border-[#d9dbd5] bg-white p-5 md:grid-cols-[auto_minmax(0,1fr)_auto]">
-      <div className={`flex h-11 w-11 items-center justify-center rounded-full border-2 ${sendable ? 'border-[#2b4c7e] text-[#2b4c7e]' : 'border-[#b98027] text-[#9a681d]'}`}>
-        {sendable ? <ShieldCheck size={20} /> : <Mail size={20} />}
+      <div className={`flex h-11 w-11 items-center justify-center rounded-full border-2 ${sentRecord ? 'border-emerald-600 text-emerald-700' : sendable ? 'border-[#2b4c7e] text-[#2b4c7e]' : 'border-[#b98027] text-[#9a681d]'}`}>
+        {sentRecord ? <CheckCircle2 size={20} /> : sendable ? <ShieldCheck size={20} /> : <Mail size={20} />}
       </div>
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
@@ -1110,8 +1261,8 @@ function LeadRow({ item, onExclude }: { item: LeadView; onExclude: () => void })
           <span className="rounded-full bg-[#eef2f7] px-2 py-1 text-xs font-bold text-[#2b4c7e]">
             {Math.round(item.lead.confidence * 100)}% fit
           </span>
-          <span className={`rounded-full px-2 py-1 text-xs font-black ${sendable ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800'}`}>
-            {sendable ? 'メール確認済み' : '連絡先未確認'}
+          <span className={`rounded-full px-2 py-1 text-xs font-black ${sentRecord ? 'bg-emerald-100 text-emerald-900' : sendable ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800'}`}>
+            {sentRecord ? '送信済み・再送対象外' : sendable ? 'メール確認済み' : '連絡先未確認'}
           </span>
         </div>
         <a href={item.lead.organizationWebsite} target="_blank" rel="noreferrer" className="mt-1 inline-flex items-center gap-1 break-all text-xs font-bold text-[#2b4c7e] underline">
@@ -1122,7 +1273,12 @@ function LeadRow({ item, onExclude }: { item: LeadView; onExclude: () => void })
           根拠: <a href={item.lead.sourceUrl} target="_blank" rel="noreferrer" className="font-bold text-[#2b4c7e] underline">公開ページを確認</a>
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          {sendable ? (
+          {sentRecord ? (
+            <>
+              <span className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 font-mono text-xs font-bold text-emerald-900">{item.contact?.email}</span>
+              <span className="text-xs font-bold text-emerald-800">{formatTokyoDate(sentRecord.sentAt)} に送信済み</span>
+            </>
+          ) : sendable ? (
             <>
               <span className="rounded-md border border-[#d9dbd5] bg-[#fbfbf9] px-3 py-2 font-mono text-xs font-bold">{item.contact?.email}</span>
               {item.validation.flags.map((flag) => <span key={flag} className="rounded-full border border-[#d9dbd5] px-2 py-1 text-[11px] font-bold text-[#5f656c]">{flag}</span>)}
@@ -1155,6 +1311,21 @@ function StatusPill({ state }: { state: Draft['state'] }) {
       {state === 'sent' && <CheckCircle2 size={13} />}{labels[state]}
     </span>
   )
+}
+
+function getSentHistory(item: LeadView, historyByEmail: Map<string, SendHistoryItem>) {
+  const email = item.contact?.email?.trim().toLowerCase()
+  return email ? historyByEmail.get(email) : undefined
+}
+
+function formatTokyoDate(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat('ja-JP', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+    timeZone: 'Asia/Tokyo',
+  }).format(date)
 }
 
 function validateContact(contact: Contact | null, lead: Lead, targetMarket: string): Validation {
