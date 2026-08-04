@@ -375,6 +375,7 @@ export default function WorkOS() {
           'profile',
           'https://www.googleapis.com/auth/gmail.readonly',
           'https://www.googleapis.com/auth/gmail.compose',
+          'https://www.googleapis.com/auth/gmail.send',
           'https://www.googleapis.com/auth/calendar.readonly',
         ],
         googleEmail: session.user.email,
@@ -497,7 +498,7 @@ export default function WorkOS() {
       provider: 'google',
       options: {
         redirectTo: getAuthCallbackUrl('/'),
-        scopes: 'email profile https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.compose https://www.googleapis.com/auth/calendar.readonly',
+        scopes: 'email profile https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.compose https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/calendar.readonly',
         queryParams: {
           access_type: 'offline',
           prompt: 'consent',

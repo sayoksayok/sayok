@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requireSalesAgentUser } from '@/lib/sales-agent-auth'
 
 export const maxDuration = 45
 
@@ -23,6 +24,9 @@ type DraftResult = {
 }
 
 export async function POST(request: NextRequest) {
+  const auth = await requireSalesAgentUser(request)
+  if (auth instanceof NextResponse) return auth
+
   try {
     const input = (await request.json()) as DraftInput
     if (!input.company || !input.offering || !input.senderName || !input.senderCompany) {

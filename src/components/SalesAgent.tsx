@@ -3,12 +3,13 @@
 import {
   ArrowLeft,
   ArrowRight,
-  Check,
   CheckCircle2,
   Clipboard,
   ExternalLink,
   FilePenLine,
+  LogOut,
   Mail,
+  RefreshCw,
   Search,
   Send,
   ShieldCheck,
@@ -16,6 +17,7 @@ import {
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import type { Contact, Lead, LeadDiscoveryResult } from '@/lib/lead-types'
+import { supabase } from '@/lib/supabase'
 
 type SiteAnalysis = {
   company: string
@@ -38,7 +40,7 @@ type SenderProfile = {
 type Draft = {
   subject: string
   body: string
-  state: 'ready' | 'opened' | 'sent'
+  state: 'ready' | 'sending' | 'sent'
 }
 
 type Validation = {
@@ -72,7 +74,14 @@ const steps = [
   ['四', '承認して送る'],
 ] as const
 
-export default function SalesAgent() {
+type SalesAgentProps = {
+  userEmail: string
+  gmailConnected: boolean
+  onReconnectGoogle: () => void
+  onSignOut: () => void
+}
+
+export default function SalesAgent({ userEmail, gmailConnected, onReconnectGoogle, onSignOut }: SalesAgentProps) {
   const [step, setStep] = useState(1)
   const [siteUrl, setSiteUrl] = useState('')
   const [analysis, setAnalysis] = useState<SiteAnalysis | null>(null)
@@ -175,13 +184,23 @@ export default function SalesAgent() {
     && profile.senderContact.trim(),
   )
 
+  async function apiFetch(path: string, init?: RequestInit) {
+    if (!supabase) throw new Error('ログイン機能が設定されていません。')
+    const { data } = await supabase.auth.getSession()
+    const token = data.session?.access_token
+    if (!token) throw new Error('ログインの有効期限が切れました。もう一度ログインしてください。')
+    const headers = new Headers(init?.headers)
+    headers.set('Authorization', `Bearer ${token}`)
+    return fetch(path, { ...init, headers })
+  }
+
   async function analyzeSite() {
     if (!siteUrl.trim()) return
     setBusy('analyze')
     setError('')
     setNotice('')
     try {
-      const response = await fetch('/api/sales-agent/analyze', {
+      const response = await apiFetch('/api/sales-agent/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ websiteUrl: normalizeUrl(siteUrl) }),
@@ -208,7 +227,7 @@ export default function SalesAgent() {
     setError('')
     setNotice('')
     try {
-      const response = await fetch('/api/lead-discovery', {
+      const response = await apiFetch('/api/lead-discovery', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -245,7 +264,7 @@ export default function SalesAgent() {
     setDraftingId(item.lead.id)
     setError('')
     try {
-      const response = await fetch('/api/sales-agent/draft', {
+      const response = await apiFetch('/api/sales-agent/draft', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -285,23 +304,54 @@ export default function SalesAgent() {
     setBusy('')
   }
 
-  function openGmail(item: LeadView) {
+  async function sendEmail(item: LeadView) {
     const contact = item.contact
     const draft = drafts[item.lead.id]
     if (!contact?.email || !draft) return
+    if (!gmailConnected) {
+      setError('送信前にGmail送信権限を再接続してください。')
+      setConfirmId('')
+      return
+    }
+
     const fullBody = `${draft.body}\n\n${buildFooter(profile)}`
-    const url = new URL('https://mail.google.com/mail/')
-    url.searchParams.set('view', 'cm')
-    url.searchParams.set('fs', '1')
-    url.searchParams.set('to', contact.email)
-    url.searchParams.set('su', draft.subject)
-    url.searchParams.set('body', fullBody)
-    window.open(url.toString(), '_blank', 'noopener,noreferrer')
     setDrafts((current) => ({
       ...current,
-      [item.lead.id]: { ...draft, state: 'opened' },
+      [item.lead.id]: { ...draft, state: 'sending' },
     }))
-    setConfirmId('')
+    setError('')
+    setNotice('')
+
+    try {
+      const response = await apiFetch('/api/sales-agent/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: contact.email,
+          subject: draft.subject,
+          body: fullBody,
+          organization: cleanOrganizationName(item.lead),
+          sourceUrl: contact.sourceUrl,
+          approvedBy: userEmail,
+          confirmed: true,
+          confirmationText: 'APPROVE_AND_SEND',
+        }),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(data.error || 'Gmail送信に失敗しました。')
+      setDrafts((current) => ({
+        ...current,
+        [item.lead.id]: { ...draft, state: 'sent' },
+      }))
+      setNotice(`${cleanOrganizationName(item.lead)} へ ${userEmail} から送信しました。`)
+      setConfirmId('')
+    } catch (err) {
+      setDrafts((current) => ({
+        ...current,
+        [item.lead.id]: { ...draft, state: 'ready' },
+      }))
+      setError(err instanceof Error ? err.message : 'Gmail送信に失敗しました。')
+    }
   }
 
   function resetWorkspace() {
@@ -366,13 +416,29 @@ export default function SalesAgent() {
               <p className="truncate text-xs font-semibold text-[#6b7076]">見込み客発掘・営業メールエージェント</p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={resetWorkspace}
-            className="rounded-md border border-[#d9dbd5] bg-white px-3 py-2 text-xs font-bold text-[#4f555c] hover:border-[#2b4c7e]"
-          >
-            新しく始める
-          </button>
+          <div className="flex items-center gap-2">
+            <div className="hidden text-right sm:block">
+              <p className="text-xs font-black text-[#20242b]">{userEmail}</p>
+              <p className={`text-[11px] font-bold ${gmailConnected ? 'text-emerald-700' : 'text-[#bc3f34]'}`}>
+                {gmailConnected ? 'Gmail送信 接続済み' : 'Gmail再接続が必要'}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={resetWorkspace}
+              className="rounded-md border border-[#d9dbd5] bg-white px-3 py-2 text-xs font-bold text-[#4f555c] hover:border-[#2b4c7e]"
+            >
+              新しく始める
+            </button>
+            <button
+              type="button"
+              onClick={onSignOut}
+              aria-label="ログアウト"
+              className="rounded-md border border-[#d9dbd5] bg-white p-2 text-[#4f555c] hover:border-[#bc3f34] hover:text-[#bc3f34]"
+            >
+              <LogOut size={16} />
+            </button>
+          </div>
         </div>
         <nav className="mx-auto grid max-w-6xl grid-cols-2 px-4 sm:grid-cols-4 sm:px-6" aria-label="営業工程">
           {steps.map(([number, label], index) => {
@@ -670,13 +736,30 @@ export default function SalesAgent() {
           <section>
             <SectionHeading
               eyebrow="STEP 4"
-              title="一通ずつ確認し、本人が送る。"
-              copy="SayOKはGmailの作成画面まで準備します。最終確認と送信は必ずあなたが行います。"
+              title="内容を確認したら、送信はSayOKに任せる。"
+              copy={`宛先・出典・件名・本文を確認して承認すると、${userEmail} のGmailからその場で送信します。`}
             />
             {!profileComplete || !drafted.length ? (
               <MissingStep onClick={() => setStep(3)} label="先に差出人情報とメール下書きを完成させてください。" />
             ) : (
               <div className="mt-7 grid gap-4">
+                <div className={`flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between ${
+                  gmailConnected
+                    ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+                    : 'border-amber-200 bg-amber-50 text-amber-900'
+                }`}>
+                  <div>
+                    <p className="text-sm font-black">送信元: {userEmail}</p>
+                    <p className="mt-1 text-xs font-bold">
+                      {gmailConnected ? 'Gmail送信権限を確認済みです。承認するまで送信しません。' : '実メール送信にはGmail権限の再接続が必要です。'}
+                    </p>
+                  </div>
+                  {!gmailConnected && (
+                    <button type="button" onClick={onReconnectGoogle} className="inline-flex items-center justify-center gap-2 rounded-md bg-amber-900 px-4 py-3 text-sm font-black text-white">
+                      <RefreshCw size={16} /> Gmailを再接続
+                    </button>
+                  )}
+                </div>
                 {drafted.map((item) => {
                   const draft = drafts[item.lead.id]
                   const contact = item.contact
@@ -704,28 +787,27 @@ export default function SalesAgent() {
                         <SecondaryButton onClick={() => copyText(item.lead.id, fullEmail)}>
                           <Clipboard size={15} /> {copied === item.lead.id ? 'コピー済み' : '本文をコピー'}
                         </SecondaryButton>
-                        {draft.state !== 'sent' && confirmId !== item.lead.id && (
-                          <PrimaryButton onClick={() => setConfirmId(item.lead.id)}>
-                            <Mail size={17} /> Gmailで開く
+                        {draft.state !== 'sent' && draft.state !== 'sending' && confirmId !== item.lead.id && (
+                          <PrimaryButton onClick={() => setConfirmId(item.lead.id)} disabled={!gmailConnected}>
+                            <Mail size={17} /> 送信内容を最終確認
+                          </PrimaryButton>
+                        )}
+                        {draft.state === 'sending' && (
+                          <PrimaryButton onClick={() => undefined} disabled>
+                            <Send size={16} /> 送信しています…
                           </PrimaryButton>
                         )}
                         {confirmId === item.lead.id && (
                           <div className="flex w-full flex-col gap-3 rounded-md border border-[#bc3f34] bg-[#bc3f34]/5 p-4 sm:flex-row sm:items-center sm:justify-between">
-                            <p className="text-sm font-bold">この宛先と内容でGmailの作成画面を開きます。まだ送信はされません。</p>
+                            <div>
+                              <p className="text-sm font-black">この承認で実メールを送信します。</p>
+                              <p className="mt-1 text-xs font-bold text-[#6b4a46]">送信後は取り消せません。宛先・出典・本文をもう一度確認してください。</p>
+                            </div>
                             <div className="flex shrink-0 gap-2">
                               <SecondaryButton onClick={() => setConfirmId('')}>戻る</SecondaryButton>
-                              <PrimaryButton onClick={() => openGmail(item)}><Send size={16} /> 承認して開く</PrimaryButton>
+                              <PrimaryButton onClick={() => void sendEmail(item)}><Send size={16} /> 承認して送信</PrimaryButton>
                             </div>
                           </div>
-                        )}
-                        {draft.state === 'opened' && (
-                          <button
-                            type="button"
-                            onClick={() => setDrafts({ ...drafts, [item.lead.id]: { ...draft, state: 'sent' } })}
-                            className="inline-flex min-h-10 items-center gap-2 rounded-md border border-emerald-300 bg-emerald-50 px-4 text-sm font-black text-emerald-800"
-                          >
-                            <Check size={16} /> 送信済みにする
-                          </button>
                         )}
                       </div>
                     </article>
@@ -734,7 +816,7 @@ export default function SalesAgent() {
               </div>
             )}
             <p className="mt-6 text-xs leading-6 text-[#6b7076]">
-              公開された事業者向け連絡先のみを対象にし、「営業お断り」の記載がある宛先には送らないでください。最終的な送信判断と適法性の確認は送信者が行ってください。
+              公開された事業者向け連絡先のみを対象にします。「営業お断り」の記載、配信停止、同一宛先への送信履歴、1日上限はサーバーでも確認します。最終的な送信判断と適法性の確認は送信者が行ってください。
             </p>
           </section>
         )}
@@ -848,10 +930,10 @@ function LeadRow({ item, onExclude }: { item: LeadView; onExclude: () => void })
 function StatusPill({ state }: { state: Draft['state'] }) {
   const styles = {
     ready: 'bg-[#fff3e8] text-[#a54813]',
-    opened: 'bg-[#eef2f7] text-[#2b4c7e]',
+    sending: 'bg-[#eef2f7] text-[#2b4c7e]',
     sent: 'bg-emerald-50 text-emerald-800',
   }
-  const labels = { ready: '送信準備完了', opened: 'Gmailで開いた', sent: '送信済み' }
+  const labels = { ready: '送信準備完了', sending: '送信中', sent: '送信済み' }
   return (
     <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-black ${styles[state]}`}>
       {state === 'sent' && <CheckCircle2 size={13} />}{labels[state]}

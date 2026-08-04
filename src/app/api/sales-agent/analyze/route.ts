@@ -1,6 +1,7 @@
 import { promises as dns } from 'dns'
 import { isIP } from 'net'
 import { NextRequest, NextResponse } from 'next/server'
+import { requireSalesAgentUser } from '@/lib/sales-agent-auth'
 
 export const maxDuration = 45
 
@@ -13,6 +14,9 @@ type SiteAnalysis = {
 }
 
 export async function POST(request: NextRequest) {
+  const auth = await requireSalesAgentUser(request)
+  if (auth instanceof NextResponse) return auth
+
   try {
     const body = (await request.json()) as { websiteUrl?: string }
     const websiteUrl = body.websiteUrl?.trim() || ''

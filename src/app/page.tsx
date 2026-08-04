@@ -1,5 +1,5 @@
-import SalesAgent from '@/components/SalesAgent'
+import SalesAgentGate from '@/components/SalesAgentGate'
 
 export default function Home() {
-  return <SalesAgent />
+  return <SalesAgentGate />
 }

@@ -2,21 +2,20 @@
 
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 
 export default function AuthCallbackClient() {
   const searchParams = useSearchParams();
-  const [status, setStatus] = useState<'exchanging' | 'done' | 'error'>('exchanging');
-  const [errorDetail, setErrorDetail] = useState<string | null>(null);
+  const [status, setStatus] = useState<'exchanging' | 'done' | 'error'>(supabase ? 'exchanging' : 'error');
+  const [errorDetail, setErrorDetail] = useState<string | null>(supabase ? null : 'Supabase not configured');
 
   useEffect(() => {
-    if (!supabase) {
-      setStatus('error');
-      setErrorDetail('Supabase not configured');
-      return;
-    }
+    if (!supabase) return;
 
     const code = searchParams.get('code');
+    const requestedNext = searchParams.get('next') || '/';
+    const nextPath = requestedNext.startsWith('/') && !requestedNext.startsWith('//') ? requestedNext : '/';
     const hash = typeof window !== 'undefined' ? window.location.hash : '';
 
     if (code) {
@@ -28,7 +27,7 @@ export default function AuthCallbackClient() {
           return;
         }
         setStatus('done');
-        window.location.href = '/';
+        window.location.href = nextPath;
       }).catch((err) => {
         setErrorDetail(err?.message ?? 'Exchange failed');
         setStatus('error');
@@ -41,8 +40,10 @@ export default function AuthCallbackClient() {
       const err = params.get('error');
       const errDesc = params.get('error_description');
       if (err) {
-        setErrorDetail(errDesc || err);
-        setStatus('error');
+        window.setTimeout(() => {
+          setErrorDetail(errDesc || err);
+          setStatus('error');
+        }, 0);
         return;
       }
       const accessToken = params.get('access_token');
@@ -55,7 +56,7 @@ export default function AuthCallbackClient() {
             return;
           }
           setStatus('done');
-          window.location.href = '/';
+          window.location.href = nextPath;
         }).catch(() => setStatus('error'));
         return;
       }
@@ -65,12 +66,16 @@ export default function AuthCallbackClient() {
     const qErr = searchParams.get('error');
     const qErrDesc = searchParams.get('error_description');
     if (qErr || qErrDesc) {
-      setErrorDetail(qErrDesc || qErr || 'Sign-in failed. Please try again.');
-      setStatus('error');
+      window.setTimeout(() => {
+        setErrorDetail(qErrDesc || qErr || 'Sign-in failed. Please try again.');
+        setStatus('error');
+      }, 0);
       return;
     }
-    setErrorDetail('No authorization code or tokens in the URL. Please try signing in again from the app.');
-    setStatus('error');
+    window.setTimeout(() => {
+      setErrorDetail('No authorization code or tokens in the URL. Please try signing in again from the app.');
+      setStatus('error');
+    }, 0);
   }, [searchParams]);
 
   if (status === 'done') {
@@ -86,7 +91,7 @@ export default function AuthCallbackClient() {
         <div className="text-center max-w-md w-full">
           <p className="text-red-600 font-semibold mb-2">Sign-in failed.</p>
           {errorDetail && <p className="text-sm text-gray-600 mb-4 break-words">{errorDetail}</p>}
-          <a href="/" className="inline-block mt-2 text-orange-600 hover:underline font-medium">Back to SayOK</a>
+          <Link href="/" className="inline-block mt-2 text-orange-600 hover:underline font-medium">Back to SayOK</Link>
         </div>
       </div>
     );

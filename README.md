@@ -6,7 +6,9 @@ SayOK is a focused sales agent for founders and small teams. It reads the user's
 website, finds organizations and public business contacts, rejects unsafe or
 unverifiable addresses, and prepares one editable message per company.
 
-The primary product is available at both `/` and `/new-deal`.
+The primary product is available at both `/` and `/new-deal`. Both routes are
+private: the application renders the sales workspace only after a valid Supabase
+Google login for the configured owner account.
 
 ## Product Flow
 
@@ -16,12 +18,14 @@ The primary product is available at both `/` and `/new-deal`.
    organizations and keeps only contacts with public evidence.
 3. **文を書く** - Add the sender details once. SayOK creates a company-specific,
    editable message for every accepted contact.
-4. **承認して送る** - Review one message at a time. SayOK opens a populated Gmail
-   compose window only after explicit confirmation. It never sends automatically.
+4. **承認して送る** - Review the recipient, public source, subject, and body one
+   message at a time. After the owner explicitly confirms, SayOK sends the message
+   through the connected Gmail account.
 
-The current workspace and sender profile are stored in the user's browser so the
-flow works without the broken legacy login dependency. Starting a new workspace
-clears the current analysis, leads, and drafts.
+The current workspace and sender profile are stored in the owner's browser.
+Starting a new workspace clears the current analysis, leads, and drafts. All
+sales-agent API routes independently verify the Supabase bearer session and the
+configured owner email; hiding the interface is not the security boundary.
 
 ## Contact Quality Rules
 
@@ -73,14 +77,32 @@ HUNTER_API_KEY=
 but its fallback search and copy are intentionally conservative and should not be
 treated as equal to the connected production workflow.
 
-Legacy SayOK routes may still use Supabase, Stripe, ElevenLabs, or Google OAuth.
-Those integrations are not required for the main sales-agent flow.
+The private sales-agent and Gmail sending flow also require:
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+GOOGLE_TOKEN_ENCRYPTION_KEY=
+SALES_AGENT_ALLOWED_EMAIL=yudai@looq.icu
+NEXT_PUBLIC_SALES_AGENT_ALLOWED_EMAIL=yudai@looq.icu
+SALES_AGENT_DAILY_SEND_LIMIT=20
+```
+
+Apply `supabase/migrations/20260804090000_private_sales_agent.sql` before enabling
+production sending. Reconnect Google after deployment so the consent grant includes
+`gmail.send`.
 
 ## Safety
 
-- SayOK never sends email automatically.
-- Opening Gmail requires a separate confirmation click.
-- The user edits and approves all external messages.
+- The sales workspace is visible only to the configured owner login.
+- The user edits and approves every external message.
+- Gmail sending requires a separate, irreversible confirmation click.
+- Server routes reject missing confirmation, wrong-account sessions, suppressed
+  recipients, duplicate recipients, dummy addresses, and sends above the daily cap.
+- OAuth tokens are encrypted at rest and never exposed through a client-readable table.
 - Public business-contact evidence is shown next to every accepted address.
 - Sender identity, business address, contact details, and an opt-out notice are
   appended to prepared messages.
@@ -90,7 +112,7 @@ Those integrations are not required for the main sales-agent flow.
 
 ```bash
 npx tsc --noEmit
-npx eslint src/components/SalesAgent.tsx src/app/api/sales-agent
+npx eslint src/components/SalesAgent.tsx src/components/SalesAgentGate.tsx src/app/api/sales-agent
 npm run build -- --webpack
 ```
 
@@ -106,7 +128,8 @@ URL analysis
 -> evidence review
 -> sender profile
 -> message generation
--> send confirmation
+-> owner confirmation
+-> Gmail API send
 ```
 
 ## Testnet Escrow Demo

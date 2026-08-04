@@ -17,6 +17,7 @@ import {
   saveRunResults,
   saveRunSegment,
 } from '@/lib/lead-intent-store'
+import { requireSalesAgentUser } from '@/lib/sales-agent-auth'
 
 export const maxDuration = 120
 
@@ -139,6 +140,9 @@ const BLOCKED_RESULT_TERMS = [
 ]
 
 export async function POST(request: NextRequest) {
+  const auth = await requireSalesAgentUser(request)
+  if (auth instanceof NextResponse) return auth
+
   const input = (await request.json()) as LeadDiscoveryInput
   const keys = getRuntimeKeys(input)
 
