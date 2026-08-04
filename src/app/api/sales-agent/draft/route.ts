@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '会社名・商材・差出人情報が必要です。' }, { status: 400 })
     }
 
-    const fallback = fallbackDraft(input)
+    const fallback = withSalesCollateral(fallbackDraft(input), input.language || 'English')
     const apiKey = process.env.ANTHROPIC_API_KEY
     if (!apiKey) return NextResponse.json({ draft: fallback, source: 'fallback' })
 
@@ -57,6 +57,8 @@ Rules:
 - Explain one specific, plausible value for this organization.
 - Keep the body between 120 and 190 words in English, or 250 and 420 Japanese characters.
 - Ask for one low-friction next step.
+- Include the LOOQ Japan website https://www.looq.jp/ near the end.
+- State that the service deck LOOQ_pitchdeck_JP.pdf is attached.
 - Do not include a signature or legal footer.
 - Avoid hype, flattery, and generic sales language.
 - Return only JSON: {"subject":"...","body":"..."}`
@@ -79,11 +81,29 @@ Rules:
 
     const data = (await response.json()) as { content?: Array<{ type?: string; text?: string }> }
     const raw = data.content?.find((item) => item.type === 'text')?.text || ''
-    const draft = parseDraft(raw)
+    const draft = withSalesCollateral(parseDraft(raw), input.language || 'English')
     if (!draft.body || !draft.subject) return NextResponse.json({ draft: fallback, source: 'fallback' })
     return NextResponse.json({ draft, source: 'anthropic' })
   } catch {
     return NextResponse.json({ error: '文面を作成できませんでした。' }, { status: 500 })
+  }
+}
+
+function withSalesCollateral(draft: DraftResult, language: 'English' | 'Japanese'): DraftResult {
+  if (!draft.body) return draft
+  const websiteLine = language === 'Japanese'
+    ? 'LOOQ Japan ウェブサイト：\nhttps://www.looq.jp/'
+    : 'LOOQ Japan website:\nhttps://www.looq.jp/'
+  const attachmentLine = language === 'Japanese'
+    ? 'サービス資料「LOOQ_pitchdeck_JP.pdf」も添付しておりますので、あわせてご覧ください。'
+    : 'I have also attached our service deck, LOOQ_pitchdeck_JP.pdf, for reference.'
+  const additions = [
+    draft.body.includes('https://www.looq.jp/') ? '' : websiteLine,
+    draft.body.includes('LOOQ_pitchdeck_JP.pdf') ? '' : attachmentLine,
+  ].filter(Boolean)
+  return {
+    ...draft,
+    body: additions.length ? `${draft.body}\n\n${additions.join('\n\n')}` : draft.body,
   }
 }
 

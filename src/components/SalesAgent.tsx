@@ -9,6 +9,7 @@ import {
   FilePenLine,
   LogOut,
   Mail,
+  Paperclip,
   RefreshCw,
   Search,
   Send,
@@ -62,17 +63,26 @@ type LeadView = {
 const STORAGE_KEY = 'sayok:sales-agent:v1'
 const PROFILE_KEY = 'sayok:sales-profile:v2'
 const BULK_CONFIRM_ID = '__bulk_send__'
+const BULK_TEMPLATE_VERSION = 2
 
 const defaultBulkTemplate: BulkTemplate = {
-  subject: '{{会社名}}様へのご提案',
+  subject: '{{会社名}}様｜屋外広告の効果測定について',
   body: `{{宛名}}
 
-突然のご連絡失礼いたします。{{自社名}}の{{差出人名}}と申します。
+はじめてご連絡いたします。{{自社名}}の{{差出人名}}と申します。
 
-貴社の公開情報を拝見し、{{提案内容}}がお役に立てる可能性があると考え、ご連絡しました。
+貴社の公式サイトを拝見し、屋外・交通広告を中心にメディア事業を展開されていることを確認しました。
 
-まずは15分ほど、現在のお取り組みや課題について情報交換できないでしょうか。
-ご担当が別の方でしたら、適切な窓口をご教示いただけますと幸いです。`,
+弊社では、実際に広告が表示された内容をフィールドで確認したうえで、その周辺の歩行者数・滞留時間・反応を集計し、信頼水準・除外条件・品質条件を明記した一本の測定レポートとして納品するサービスを提供しています。
+
+貴社のようなメディア事業者様にとって、掲出実績と現地の行動データを一つのレポートで示せることは、広告枠の価格根拠や媒体提案の説得力につながると考えています。
+
+まずは15〜20分ほどお時間をいただき、現在の効果測定に関するお悩みをお聞かせいただけますでしょうか。
+
+LOOQ Japan ウェブサイト：
+https://www.looq.jp/
+
+サービス資料「LOOQ_pitchdeck_JP.pdf」も添付しておりますので、あわせてご覧ください。`,
 }
 
 const defaultProfile: SenderProfile = {
@@ -143,6 +153,7 @@ export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnable
           result?: LeadDiscoveryResult
           drafts?: Record<string, Draft>
           bulkTemplate?: BulkTemplate
+          bulkTemplateVersion?: number
           excludedIds?: string[]
         }
         if (saved.step && saved.step >= 1 && saved.step <= 4) setStep(saved.step)
@@ -154,7 +165,9 @@ export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnable
         if (saved.count && [5, 8, 10, 14].includes(saved.count)) setCount(saved.count)
         setResult(saved.result || null)
         setDrafts(saved.drafts || {})
-        setBulkTemplate({ ...defaultBulkTemplate, ...saved.bulkTemplate })
+        setBulkTemplate(saved.bulkTemplateVersion === BULK_TEMPLATE_VERSION
+          ? { ...defaultBulkTemplate, ...saved.bulkTemplate }
+          : defaultBulkTemplate)
         setExcludedIds(saved.excludedIds || [])
       }
     } catch {
@@ -182,6 +195,7 @@ export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnable
       result,
       drafts,
       bulkTemplate,
+      bulkTemplateVersion: BULK_TEMPLATE_VERSION,
       excludedIds,
     }))
   }, [hydrated, step, siteUrl, analysis, targetMarket, goal, hint, count, result, drafts, bulkTemplate, excludedIds])
@@ -780,6 +794,10 @@ export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnable
                     自動差し替え： <code>{'{{宛名}}'}</code> <code>{'{{会社名}}'}</code> <code>{'{{差出人名}}'}</code> <code>{'{{自社名}}'}</code> <code>{'{{提案内容}}'}</code>
                     <br />宛名が見つからない場合は「会社名 ご担当者様」にします。
                   </div>
+                  <div className="mt-3 flex flex-col gap-2 rounded-md border border-emerald-200 bg-emerald-50 p-4 text-xs font-bold text-emerald-900 sm:flex-row sm:items-center sm:justify-between">
+                    <span className="inline-flex items-center gap-2"><Paperclip size={15} /> LOOQ_pitchdeck_JP.pdf（約2.3MB）を全メールへ自動添付</span>
+                    <a href="/sales-assets/LOOQ_pitchdeck_JP.pdf" target="_blank" rel="noreferrer" className="underline">添付資料を確認</a>
+                  </div>
                   <div className="mt-5 flex justify-end">
                     <PrimaryButton
                       onClick={applyBulkTemplate}
@@ -940,6 +958,9 @@ export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnable
                       </div>
                       <div className="mt-4">
                         <p className="font-black">{draft.subject}</p>
+                        <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-[#eef2f7] px-3 py-1.5 text-xs font-black text-[#2b4c7e]">
+                          <Paperclip size={14} /> LOOQ_pitchdeck_JP.pdf
+                        </div>
                         <div className="mt-3 max-h-80 overflow-auto whitespace-pre-wrap rounded-md bg-[#f7f7f4] p-4 text-sm leading-7">{fullEmail}</div>
                       </div>
                       <div className="mt-4 flex flex-wrap items-center justify-end gap-2">

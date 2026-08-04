@@ -20,6 +20,12 @@ type SendInput = {
 }
 
 const dailySendLimit = Math.max(1, Math.min(100, Number(process.env.SALES_AGENT_DAILY_SEND_LIMIT || 20)))
+const pitchDeck = {
+  filename: 'LOOQ_pitchdeck_JP.pdf',
+  mimeType: 'application/pdf',
+  url: process.env.LOOQ_PITCH_DECK_URL || 'https://sayok-production.vercel.app/sales-assets/LOOQ_pitchdeck_JP.pdf',
+}
+const maxAttachmentBytes = 10 * 1024 * 1024
 
 export async function POST(request: NextRequest) {
   const context = await requireSalesAgentUser(request)
@@ -69,6 +75,7 @@ export async function POST(request: NextRequest) {
       to_email: to,
       subject: input!.subject!.trim(),
       source_url: input!.sourceUrl!.trim(),
+      attachments: [pitchDeck.filename],
     },
   }).select('id').single()
   if (auditError || !audit) {
@@ -80,10 +87,12 @@ export async function POST(request: NextRequest) {
       context.admin,
       connectionLookup.data as SalesAgentGoogleConnection,
     )
+    const attachment = await loadPitchDeck()
     const sent = await sendSalesEmail(accessToken, {
       to,
       subject: input!.subject!.trim(),
       body: input!.body!.trim(),
+      attachments: [attachment],
     })
     const sentAt = new Date().toISOString()
     const { error: sentAuditError } = await context.admin.from('work_os_activity_events').insert({
@@ -99,6 +108,7 @@ export async function POST(request: NextRequest) {
         to_email: to,
         subject: input!.subject!.trim(),
         source_url: input!.sourceUrl!.trim(),
+        attachments: [pitchDeck.filename],
         gmail_message_id: sent.id,
         gmail_thread_id: sent.threadId,
         sent_at: sentAt,
@@ -112,6 +122,7 @@ export async function POST(request: NextRequest) {
       sentAt,
       from: salesAgentAllowedEmail,
       to,
+      attachments: [pitchDeck.filename],
       auditRecorded: !sentAuditError,
       auditWarning: sentAuditError ? '送信済みですが監査ログの保存に失敗しました。' : null,
     })
@@ -128,11 +139,25 @@ export async function POST(request: NextRequest) {
         to_email: to,
         subject: input!.subject!.trim(),
         source_url: input!.sourceUrl!.trim(),
+        attachments: [pitchDeck.filename],
         error: message,
       },
     })
     return NextResponse.json({ error: message }, { status: 502 })
   }
+}
+
+async function loadPitchDeck() {
+  const response = await fetch(pitchDeck.url, { cache: 'force-cache' })
+  if (!response.ok) throw new Error('LOOQサービス資料を取得できませんでした。送信を停止しました。')
+  const content = Buffer.from(await response.arrayBuffer())
+  if (!content.length || content.length > maxAttachmentBytes) {
+    throw new Error('LOOQサービス資料のファイルサイズを確認できません。送信を停止しました。')
+  }
+  if (!content.subarray(0, 5).equals(Buffer.from('%PDF-'))) {
+    throw new Error('LOOQサービス資料がPDFではありません。送信を停止しました。')
+  }
+  return { ...pitchDeck, content }
 }
 
 function validateSendInput(input: SendInput | null) {

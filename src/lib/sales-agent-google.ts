@@ -77,19 +77,27 @@ export async function getValidSalesAgentAccessToken(
 
 export async function sendSalesEmail(
   accessToken: string,
-  input: { to: string; subject: string; body: string },
+  input: {
+    to: string
+    subject: string
+    body: string
+    attachments?: Array<{ filename: string; mimeType: string; content: Buffer }>
+  },
 ) {
   const to = singleLine(input.to)
   const subject = `=?UTF-8?B?${Buffer.from(singleLine(input.subject), 'utf8').toString('base64')}?=`
-  const raw = [
-    `To: ${to}`,
-    `Subject: ${subject}`,
-    'MIME-Version: 1.0',
-    'Content-Type: text/plain; charset="UTF-8"',
-    'Content-Transfer-Encoding: 8bit',
-    '',
-    input.body,
-  ].join('\r\n')
+  const attachments = input.attachments || []
+  const raw = attachments.length
+    ? buildMultipartMessage({ to, subject, body: input.body, attachments })
+    : [
+        `To: ${to}`,
+        `Subject: ${subject}`,
+        'MIME-Version: 1.0',
+        'Content-Type: text/plain; charset="UTF-8"',
+        'Content-Transfer-Encoding: 8bit',
+        '',
+        input.body,
+      ].join('\r\n')
 
   const response = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
     method: 'POST',
@@ -108,6 +116,52 @@ export async function sendSalesEmail(
     throw new Error(data.error?.message || `Gmail API returned ${response.status}`)
   }
   return { id: data.id, threadId: data.threadId || null }
+}
+
+function buildMultipartMessage(input: {
+  to: string
+  subject: string
+  body: string
+  attachments: Array<{ filename: string; mimeType: string; content: Buffer }>
+}) {
+  const boundary = `sayok_${crypto.randomUUID()}`
+  const lines = [
+    `To: ${input.to}`,
+    `Subject: ${input.subject}`,
+    'MIME-Version: 1.0',
+    `Content-Type: multipart/mixed; boundary="${boundary}"`,
+    '',
+    `--${boundary}`,
+    'Content-Type: text/plain; charset="UTF-8"',
+    'Content-Transfer-Encoding: 8bit',
+    '',
+    input.body,
+  ]
+
+  for (const attachment of input.attachments) {
+    const filename = safeFilename(attachment.filename)
+    const mimeType = /^[a-z0-9.+-]+\/[a-z0-9.+-]+$/i.test(attachment.mimeType)
+      ? attachment.mimeType
+      : 'application/octet-stream'
+    lines.push(
+      `--${boundary}`,
+      `Content-Type: ${mimeType}; name="${filename}"`,
+      'Content-Transfer-Encoding: base64',
+      `Content-Disposition: attachment; filename="${filename}"`,
+      '',
+      wrapBase64(attachment.content.toString('base64')),
+    )
+  }
+  lines.push(`--${boundary}--`, '')
+  return lines.join('\r\n')
+}
+
+function safeFilename(value: string) {
+  return singleLine(value).replace(/["\\]/g, '_').slice(0, 180) || 'attachment'
+}
+
+function wrapBase64(value: string) {
+  return value.match(/.{1,76}/g)?.join('\r\n') || ''
 }
 
 function singleLine(value: string) {
