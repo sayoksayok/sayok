@@ -19,6 +19,7 @@ export default function SalesAgentGate() {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(Boolean(supabase))
   const [busy, setBusy] = useState(false)
+  const [emailSent, setEmailSent] = useState(false)
   const [error, setError] = useState('')
   const [gmailStatus, setGmailStatus] = useState<GmailStatus>({
     connected: false,
@@ -134,6 +135,34 @@ export default function SalesAgentGate() {
     }
   }
 
+  async function signInWithEmail() {
+    if (!supabase) return
+    setBusy(true)
+    setEmailSent(false)
+    setError('')
+
+    const healthy = await checkAuthHealth()
+    if (!healthy) {
+      setBusy(false)
+      setError('現在ログインサーバーへ接続できません。設定を確認してください。')
+      return
+    }
+
+    const { error: signInError } = await supabase.auth.signInWithOtp({
+      email: allowedEmail,
+      options: {
+        emailRedirectTo: getAuthCallbackUrl('/'),
+        shouldCreateUser: true,
+      },
+    })
+    setBusy(false)
+    if (signInError) {
+      setError(`ログインメールを送れませんでした: ${signInError.message}`)
+      return
+    }
+    setEmailSent(true)
+  }
+
   async function signOut() {
     if (!supabase) return
     await supabase.auth.signOut()
@@ -192,6 +221,19 @@ export default function SalesAgentGate() {
           >
             {busy ? '接続を確認しています…' : `${allowedEmail} でGoogleログイン`}
           </button>
+          <button
+            type="button"
+            onClick={signInWithEmail}
+            disabled={busy}
+            className="mt-3 w-full rounded-md border border-[#2b4c7e] bg-white px-5 py-3 text-sm font-black text-[#2b4c7e] hover:bg-[#eef3f8] disabled:opacity-50"
+          >
+            メールのログインリンクを受け取る
+          </button>
+          {emailSent && (
+            <p className="mt-4 rounded-md bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-800">
+              {allowedEmail} にログインリンクを送りました。メール内のリンクを開いてください。
+            </p>
+          )}
           {error && <p className="mt-4 rounded-md bg-red-50 px-4 py-3 text-sm font-bold text-red-700">{error}</p>}
         </section>
       </main>
