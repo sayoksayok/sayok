@@ -63,7 +63,8 @@ type LeadView = {
 const STORAGE_KEY = 'sayok:sales-agent:v1'
 const PROFILE_KEY = 'sayok:sales-profile:v2'
 const BULK_CONFIRM_ID = '__bulk_send__'
-const BULK_TEMPLATE_VERSION = 2
+const BULK_TEMPLATE_VERSION = 3
+const SALES_DECK_DRIVE_URL = 'https://drive.google.com/file/d/1p5NZiJnWU2CrnBmn2tb82iZbre7W0x9G/view?usp=sharing'
 
 const defaultBulkTemplate: BulkTemplate = {
   subject: '{{会社名}}様｜屋外広告の効果測定について',
@@ -82,7 +83,10 @@ const defaultBulkTemplate: BulkTemplate = {
 LOOQ Japan ウェブサイト：
 https://www.looq.jp/
 
-サービス資料「LOOQ_pitchdeck_JP.pdf」も添付しておりますので、あわせてご覧ください。`,
+サービス資料（Google Drive）：
+${SALES_DECK_DRIVE_URL}
+
+同じ資料「LOOQ_pitchdeck_JP.pdf」も添付しております。`,
 }
 
 const defaultProfile: SenderProfile = {
@@ -799,7 +803,10 @@ export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnable
                   </div>
                   <div className="mt-3 flex flex-col gap-2 rounded-md border border-emerald-200 bg-emerald-50 p-4 text-xs font-bold text-emerald-900 sm:flex-row sm:items-center sm:justify-between">
                     <span className="inline-flex items-center gap-2"><Paperclip size={15} /> LOOQ_pitchdeck_JP.pdf（約2.3MB）を全メールへ自動添付</span>
-                    <a href="/sales-assets/LOOQ_pitchdeck_JP.pdf" target="_blank" rel="noreferrer" className="underline">添付資料を確認</a>
+                    <span className="flex flex-wrap gap-3">
+                      <a href={SALES_DECK_DRIVE_URL} target="_blank" rel="noreferrer" className="underline">Google Driveで開く</a>
+                      <a href="/sales-assets/LOOQ_pitchdeck_JP.pdf" target="_blank" rel="noreferrer" className="underline">添付PDFを確認</a>
+                    </span>
                   </div>
                   <div className="mt-5 flex justify-end">
                     <PrimaryButton
@@ -964,6 +971,9 @@ export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnable
                         <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-[#eef2f7] px-3 py-1.5 text-xs font-black text-[#2b4c7e]">
                           <Paperclip size={14} /> LOOQ_pitchdeck_JP.pdf
                         </div>
+                        <a href={SALES_DECK_DRIVE_URL} target="_blank" rel="noreferrer" className="ml-3 inline-flex items-center gap-1 text-xs font-bold text-[#2b4c7e] underline">
+                          資料をGoogle Driveで確認 <ExternalLink size={13} />
+                        </a>
                         <div className="mt-3 max-h-80 overflow-auto whitespace-pre-wrap rounded-md bg-[#f7f7f4] p-4 text-sm leading-7">{fullEmail}</div>
                       </div>
                       <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
@@ -1305,6 +1315,11 @@ function prepareSalesBody(value: string) {
       : japanese
         ? 'LOOQ Japan ウェブサイト：\nhttps://www.looq.jp/'
         : 'LOOQ Japan website:\nhttps://www.looq.jp/',
+    body.includes(SALES_DECK_DRIVE_URL)
+      ? ''
+      : japanese
+        ? `サービス資料（Google Drive）：\n${SALES_DECK_DRIVE_URL}`
+        : `Service deck (Google Drive):\n${SALES_DECK_DRIVE_URL}`,
     body.includes('LOOQ_pitchdeck_JP.pdf')
       ? ''
       : japanese

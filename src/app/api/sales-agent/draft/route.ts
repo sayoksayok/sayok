@@ -23,6 +23,8 @@ type DraftResult = {
   body: string
 }
 
+const SALES_DECK_DRIVE_URL = 'https://drive.google.com/file/d/1p5NZiJnWU2CrnBmn2tb82iZbre7W0x9G/view?usp=sharing'
+
 export async function POST(request: NextRequest) {
   const auth = await requireSalesAgentUser(request)
   if (auth instanceof NextResponse) return auth
@@ -58,6 +60,7 @@ Rules:
 - Keep the body between 120 and 190 words in English, or 250 and 420 Japanese characters.
 - Ask for one low-friction next step.
 - Include the LOOQ Japan website https://www.looq.jp/ near the end.
+- Include the service deck Google Drive URL ${SALES_DECK_DRIVE_URL} near the end.
 - State that the service deck LOOQ_pitchdeck_JP.pdf is attached.
 - Do not include a signature or legal footer.
 - Avoid hype, flattery, and generic sales language.
@@ -97,8 +100,12 @@ function withSalesCollateral(draft: DraftResult, language: 'English' | 'Japanese
   const attachmentLine = language === 'Japanese'
     ? 'サービス資料「LOOQ_pitchdeck_JP.pdf」も添付しておりますので、あわせてご覧ください。'
     : 'I have also attached our service deck, LOOQ_pitchdeck_JP.pdf, for reference.'
+  const driveLine = language === 'Japanese'
+    ? `サービス資料（Google Drive）：\n${SALES_DECK_DRIVE_URL}`
+    : `Service deck (Google Drive):\n${SALES_DECK_DRIVE_URL}`
   const additions = [
     draft.body.includes('https://www.looq.jp/') ? '' : websiteLine,
+    draft.body.includes(SALES_DECK_DRIVE_URL) ? '' : driveLine,
     draft.body.includes('LOOQ_pitchdeck_JP.pdf') ? '' : attachmentLine,
   ].filter(Boolean)
   return {

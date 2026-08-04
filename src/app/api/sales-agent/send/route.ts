@@ -26,6 +26,7 @@ const pitchDeck = {
   url: process.env.LOOQ_PITCH_DECK_URL || 'https://sayok-production.vercel.app/sales-assets/LOOQ_pitchdeck_JP.pdf',
 }
 const maxAttachmentBytes = 10 * 1024 * 1024
+const SALES_DECK_DRIVE_URL = 'https://drive.google.com/file/d/1p5NZiJnWU2CrnBmn2tb82iZbre7W0x9G/view?usp=sharing'
 
 export async function POST(request: NextRequest) {
   const context = await requireSalesAgentUser(request)
@@ -176,6 +177,11 @@ function prepareSalesEmailBody(value: string) {
       : japanese
         ? 'LOOQ Japan ウェブサイト：\nhttps://www.looq.jp/'
         : 'LOOQ Japan website:\nhttps://www.looq.jp/',
+    main.includes(SALES_DECK_DRIVE_URL)
+      ? ''
+      : japanese
+        ? `サービス資料（Google Drive）：\n${SALES_DECK_DRIVE_URL}`
+        : `Service deck (Google Drive):\n${SALES_DECK_DRIVE_URL}`,
     main.includes(pitchDeck.filename)
       ? ''
       : japanese
