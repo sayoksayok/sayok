@@ -420,8 +420,8 @@ export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnable
           <div className="flex items-center gap-2">
             <div className="hidden text-right sm:block">
               <p className="text-xs font-black text-[#20242b]">{userEmail}</p>
-              <p className={`text-[11px] font-bold ${gmailConnected ? 'text-emerald-700' : 'text-[#bc3f34]'}`}>
-                {gmailConnected ? 'Gmail送信 接続済み' : 'Gmail再接続が必要'}
+              <p className={`text-[11px] font-bold ${gmailConnected ? 'text-emerald-700' : googleAuthEnabled ? 'text-[#bc3f34]' : 'text-amber-700'}`}>
+                {gmailConnected ? 'Gmail送信 接続済み' : googleAuthEnabled ? 'Gmail再接続が必要' : 'Gmail送信 設定中'}
               </p>
             </div>
             <button
