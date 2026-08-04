@@ -1321,8 +1321,6 @@ function buildFooter(profile: SenderProfile) {
       `${profile.senderCompany} ${profile.senderName}`.trim(),
       profile.senderAddress,
       `連絡先: ${profile.senderContact}`,
-      '本メールは、貴社が公開している事業者向け連絡先へお送りしています。',
-      '今後のご案内が不要な場合は、その旨をご返信ください。以後のご連絡を停止します。',
     ].filter(Boolean).join('\n')
   }
 
@@ -1331,8 +1329,6 @@ function buildFooter(profile: SenderProfile) {
     `${profile.senderCompany} ${profile.senderName}`.trim(),
     profile.senderAddress,
     `Contact: ${profile.senderContact}`,
-    'This message was sent to a business contact published on your organization’s website.',
-    'If you do not wish to receive further messages, please reply and we will not contact you again.',
   ].filter(Boolean).join('\n')
 }
 
