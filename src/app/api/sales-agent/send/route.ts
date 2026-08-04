@@ -36,35 +36,40 @@ export async function POST(request: NextRequest) {
   }
 
   const { count, error: countError } = await context.admin
-    .from('sales_agent_email_sends')
+    .from('work_os_activity_events')
     .select('id', { count: 'exact', head: true })
-    .eq('user_id', context.user.id)
-    .in('status', ['approved', 'sent'])
+    .eq('workspace_id', context.workspaceId)
+    .eq('event_type', 'sales_email_sent')
     .gte('created_at', startOfTokyoDay())
   if (countError) return NextResponse.json({ error: countError.message }, { status: 500 })
   if ((count || 0) >= dailySendLimit) {
     return NextResponse.json({ error: `本日の送信上限 ${dailySendLimit} 通に達しました。` }, { status: 429 })
   }
 
-  const [{ data: suppressed }, { data: duplicate }, { data: connection, error: connectionError }] = await Promise.all([
-    context.admin.from('sales_agent_suppressions').select('id,reason').eq('user_id', context.user.id).eq('email', to).maybeSingle(),
-    context.admin.from('sales_agent_email_sends').select('id,sent_at').eq('user_id', context.user.id).eq('to_email', to).eq('status', 'sent').limit(1).maybeSingle(),
-    context.admin.from('sales_agent_google_connections').select('*').eq('user_id', context.user.id).maybeSingle(),
+  const [suppressionLookup, duplicateLookup, connectionLookup] = await Promise.all([
+    context.admin.from('work_os_activity_events').select('id,payload').eq('workspace_id', context.workspaceId).eq('event_type', 'sales_email_suppressed').eq('payload->>to_email', to).limit(1).maybeSingle(),
+    context.admin.from('work_os_activity_events').select('id,created_at').eq('workspace_id', context.workspaceId).eq('event_type', 'sales_email_sent').eq('payload->>to_email', to).limit(1).maybeSingle(),
+    context.admin.from('work_os_google_connections').select('*').eq('workspace_id', context.workspaceId).eq('user_id', context.user.id).maybeSingle(),
   ])
-  if (suppressed) return NextResponse.json({ error: 'この宛先は配信停止リストに登録されています。' }, { status: 409 })
-  if (duplicate) return NextResponse.json({ error: 'この宛先には送信済みです。重複送信を停止しました。' }, { status: 409 })
-  if (connectionError) return NextResponse.json({ error: connectionError.message }, { status: 500 })
-  if (!connection) return NextResponse.json({ error: '送信前にGmailを接続してください。' }, { status: 409 })
+  const lookupError = suppressionLookup.error || duplicateLookup.error || connectionLookup.error
+  if (lookupError) return NextResponse.json({ error: lookupError.message }, { status: 500 })
+  if (suppressionLookup.data) return NextResponse.json({ error: 'この宛先は配信停止リストに登録されています。' }, { status: 409 })
+  if (duplicateLookup.data) return NextResponse.json({ error: 'この宛先には送信済みです。重複送信を停止しました。' }, { status: 409 })
+  if (!connectionLookup.data) return NextResponse.json({ error: '送信前にGmailを接続してください。' }, { status: 409 })
 
-  const { data: audit, error: auditError } = await context.admin.from('sales_agent_email_sends').insert({
-    user_id: context.user.id,
-    google_email: salesAgentAllowedEmail,
-    organization: input!.organization!.trim(),
-    to_email: to,
-    subject: input!.subject!.trim(),
-    source_url: input!.sourceUrl!.trim(),
-    status: 'approved',
-    approved_at: new Date().toISOString(),
+  const { data: audit, error: auditError } = await context.admin.from('work_os_activity_events').insert({
+    workspace_id: context.workspaceId,
+    actor_type: 'user',
+    event_type: 'sales_email_approved',
+    summary: `${input!.organization!.trim()} への営業メールを承認`,
+    payload: {
+      approved_by: approvedBy,
+      google_email: salesAgentAllowedEmail,
+      organization: input!.organization!.trim(),
+      to_email: to,
+      subject: input!.subject!.trim(),
+      source_url: input!.sourceUrl!.trim(),
+    },
   }).select('id').single()
   if (auditError || !audit) {
     return NextResponse.json({ error: auditError?.message || '送信承認を記録できませんでした。' }, { status: 500 })
@@ -73,7 +78,7 @@ export async function POST(request: NextRequest) {
   try {
     const accessToken = await getValidSalesAgentAccessToken(
       context.admin,
-      connection as SalesAgentGoogleConnection,
+      connectionLookup.data as SalesAgentGoogleConnection,
     )
     const sent = await sendSalesEmail(accessToken, {
       to,
@@ -81,13 +86,24 @@ export async function POST(request: NextRequest) {
       body: input!.body!.trim(),
     })
     const sentAt = new Date().toISOString()
-    await context.admin.from('sales_agent_email_sends').update({
-      status: 'sent',
-      gmail_message_id: sent.id,
-      gmail_thread_id: sent.threadId,
-      sent_at: sentAt,
-      error: null,
-    }).eq('id', audit.id)
+    const { error: sentAuditError } = await context.admin.from('work_os_activity_events').insert({
+      workspace_id: context.workspaceId,
+      actor_type: 'integration',
+      event_type: 'sales_email_sent',
+      summary: `${input!.organization!.trim()} へ営業メールを送信`,
+      payload: {
+        approval_event_id: audit.id,
+        approved_by: approvedBy,
+        google_email: salesAgentAllowedEmail,
+        organization: input!.organization!.trim(),
+        to_email: to,
+        subject: input!.subject!.trim(),
+        source_url: input!.sourceUrl!.trim(),
+        gmail_message_id: sent.id,
+        gmail_thread_id: sent.threadId,
+        sent_at: sentAt,
+      },
+    })
 
     return NextResponse.json({
       ok: true,
@@ -96,10 +112,25 @@ export async function POST(request: NextRequest) {
       sentAt,
       from: salesAgentAllowedEmail,
       to,
+      auditRecorded: !sentAuditError,
+      auditWarning: sentAuditError ? '送信済みですが監査ログの保存に失敗しました。' : null,
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Gmail送信に失敗しました。'
-    await context.admin.from('sales_agent_email_sends').update({ status: 'failed', error: message }).eq('id', audit.id)
+    await context.admin.from('work_os_activity_events').insert({
+      workspace_id: context.workspaceId,
+      actor_type: 'integration',
+      event_type: 'sales_email_failed',
+      summary: `${input!.organization!.trim()} への営業メール送信に失敗`,
+      payload: {
+        approval_event_id: audit.id,
+        approved_by: approvedBy,
+        to_email: to,
+        subject: input!.subject!.trim(),
+        source_url: input!.sourceUrl!.trim(),
+        error: message,
+      },
+    })
     return NextResponse.json({ error: message }, { status: 502 })
   }
 }

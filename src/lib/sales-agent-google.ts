@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { decryptToken, encryptToken } from '@/lib/work-os-server'
 
 export type SalesAgentGoogleConnection = {
+  workspace_id: string
   user_id: string
   google_email: string
   encrypted_access_token: string
@@ -46,11 +47,11 @@ export async function getValidSalesAgentAccessToken(
     error_description?: string
   }
   if (!response.ok || !data.access_token) {
-    await admin.from('sales_agent_google_connections').update({
+    await admin.from('work_os_google_connections').update({
       status: 'needs_reauth',
       last_error: data.error_description || 'Google token refresh failed',
       updated_at: new Date().toISOString(),
-    }).eq('user_id', connection.user_id)
+    }).eq('workspace_id', connection.workspace_id).eq('user_id', connection.user_id)
     throw new Error('Gmailの認証期限が切れました。再接続してください。')
   }
 
@@ -60,14 +61,15 @@ export async function getValidSalesAgentAccessToken(
   }
 
   const tokenExpiresAt = new Date(Date.now() + (data.expires_in || 3600) * 1000).toISOString()
-  const { error } = await admin.from('sales_agent_google_connections').update({
+  const { error } = await admin.from('work_os_google_connections').update({
     encrypted_access_token: encryptToken(data.access_token),
     token_expires_at: tokenExpiresAt,
     scopes,
+    gmail_connected: true,
     status: 'connected',
     last_error: null,
     updated_at: new Date().toISOString(),
-  }).eq('user_id', connection.user_id)
+  }).eq('workspace_id', connection.workspace_id).eq('user_id', connection.user_id)
   if (error) throw new Error(error.message)
 
   return data.access_token

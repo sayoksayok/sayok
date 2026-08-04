@@ -53,9 +53,20 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const { error: profileError } = await context.admin.from('work_os_user_profiles').upsert({
+      user_id: context.user.id,
+      email: googleEmail,
+      full_name: context.user.user_metadata?.full_name || context.user.user_metadata?.name || null,
+      avatar_url: context.user.user_metadata?.avatar_url || null,
+      auth_provider: 'google',
+      updated_at: new Date().toISOString(),
+    })
+    if (profileError) throw new Error(profileError.message)
+
     const { data: existing } = await context.admin
-      .from('sales_agent_google_connections')
+      .from('work_os_google_connections')
       .select('encrypted_refresh_token')
+      .eq('workspace_id', context.workspaceId)
       .eq('user_id', context.user.id)
       .maybeSingle()
     const expiresIn = Number(tokenInfo.expires_in || 0)
@@ -63,7 +74,8 @@ export async function POST(request: NextRequest) {
       ? new Date(Date.now() + expiresIn * 1000).toISOString()
       : body.expiresAt || new Date(Date.now() + 55 * 60 * 1000).toISOString()
 
-    const { error } = await context.admin.from('sales_agent_google_connections').upsert({
+    const { error } = await context.admin.from('work_os_google_connections').upsert({
+      workspace_id: context.workspaceId,
       user_id: context.user.id,
       google_email: googleEmail,
       encrypted_access_token: encryptToken(body.accessToken),
@@ -72,11 +84,12 @@ export async function POST(request: NextRequest) {
         : existing?.encrypted_refresh_token || null,
       token_expires_at: tokenExpiresAt,
       scopes,
+      gmail_connected: true,
       status: 'connected',
       last_error: null,
       connected_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-    }, { onConflict: 'user_id' })
+    }, { onConflict: 'workspace_id,user_id' })
     if (error) throw new Error(error.message)
 
     return NextResponse.json({

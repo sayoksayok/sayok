@@ -8,8 +8,9 @@ export async function GET(request: NextRequest) {
   if (context instanceof NextResponse) return context
 
   const { data, error } = await context.admin
-    .from('sales_agent_google_connections')
+    .from('work_os_google_connections')
     .select('google_email,scopes,status,token_expires_at')
+    .eq('workspace_id', context.workspaceId)
     .eq('user_id', context.user.id)
     .maybeSingle()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

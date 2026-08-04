@@ -3,9 +3,13 @@ import { requireWorkOsUser, type WorkOsServerContext } from '@/lib/work-os-serve
 
 export const salesAgentAllowedEmail = (process.env.SALES_AGENT_ALLOWED_EMAIL || 'yudai@looq.icu').trim().toLowerCase()
 
+export type SalesAgentServerContext = WorkOsServerContext & {
+  workspaceId: string
+}
+
 export async function requireSalesAgentUser(
   request: NextRequest,
-): Promise<WorkOsServerContext | NextResponse> {
+): Promise<SalesAgentServerContext | NextResponse> {
   const context = await requireWorkOsUser(request)
   if (context instanceof NextResponse) return context
 
@@ -17,5 +21,44 @@ export async function requireSalesAgentUser(
     )
   }
 
-  return context
+  const { data: existingWorkspace, error: workspaceLookupError } = await context.admin
+    .from('work_os_workspaces')
+    .select('id')
+    .eq('owner_id', context.user.id)
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle()
+  if (workspaceLookupError) {
+    return NextResponse.json({ error: workspaceLookupError.message }, { status: 500 })
+  }
+
+  let workspaceId = existingWorkspace?.id as string | undefined
+  if (!workspaceId) {
+    const { data: createdWorkspace, error: createWorkspaceError } = await context.admin
+      .from('work_os_workspaces')
+      .insert({
+        owner_id: context.user.id,
+        name: 'SayOK Sales',
+        company_name: 'LOOQ',
+        timezone: 'Asia/Tokyo',
+      })
+      .select('id')
+      .single()
+    if (createWorkspaceError || !createdWorkspace) {
+      return NextResponse.json(
+        { error: createWorkspaceError?.message || '営業ワークスペースを作成できませんでした。' },
+        { status: 500 },
+      )
+    }
+    workspaceId = createdWorkspace.id as string
+  }
+
+  const { error: memberError } = await context.admin.from('work_os_members').upsert({
+    workspace_id: workspaceId,
+    user_id: context.user.id,
+    role: 'owner',
+  }, { onConflict: 'workspace_id,user_id' })
+  if (memberError) return NextResponse.json({ error: memberError.message }, { status: 500 })
+
+  return { ...context, workspaceId }
 }

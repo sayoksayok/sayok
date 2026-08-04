@@ -91,9 +91,10 @@ NEXT_PUBLIC_SALES_AGENT_ALLOWED_EMAIL=yudai@looq.icu
 SALES_AGENT_DAILY_SEND_LIMIT=20
 ```
 
-Apply `supabase/migrations/20260804090000_private_sales_agent.sql` before enabling
-production sending. Reconnect Google after deployment so the consent grant includes
-`gmail.send`.
+The sales-agent reuses the existing private Work OS workspace, Google connection,
+and activity audit tables. Apply the existing Work OS foundation and Google
+integration migrations if this is a fresh Supabase project. Reconnect Google after
+deployment so the consent grant includes `gmail.send`.
 
 ## Safety
 
