@@ -14,6 +14,7 @@ type GmailStatus = {
 }
 
 const allowedEmail = (process.env.NEXT_PUBLIC_SALES_AGENT_ALLOWED_EMAIL || 'yudai@looq.icu').toLowerCase()
+const googleLoginEnabled = process.env.NEXT_PUBLIC_GOOGLE_AUTH_ENABLED === 'true'
 
 export default function SalesAgentGate() {
   const [user, setUser] = useState<User | null>(null)
@@ -72,6 +73,9 @@ export default function SalesAgentGate() {
   }, [authenticatedFetch, loadGmailStatus])
 
   useEffect(() => {
+    const resetBusyState = () => setBusy(false)
+    window.addEventListener('pageshow', resetBusyState)
+
     if (!supabase) return
 
     supabase.auth.getSession().then(({ data }) => {
@@ -94,11 +98,19 @@ export default function SalesAgentGate() {
       }
     })
 
-    return () => listener.subscription.unsubscribe()
+    return () => {
+      window.removeEventListener('pageshow', resetBusyState)
+      listener.subscription.unsubscribe()
+    }
   }, [persistGoogleConnection])
 
   async function signInWithGoogle() {
     if (!supabase) return
+    if (!googleLoginEnabled) {
+      setBusy(false)
+      setError('Googleログインは現在設定中です。下のメールログインを使ってください。')
+      return
+    }
     setBusy(true)
     setError('')
 
@@ -213,14 +225,20 @@ export default function SalesAgentGate() {
             <div className="flex items-center gap-2"><Mail size={17} className="text-[#2b4c7e]" /> 送信元: {allowedEmail}</div>
             <div className="mt-2 flex items-center gap-2"><ShieldCheck size={17} className="text-emerald-700" /> 承認後のみGmail送信</div>
           </div>
-          <button
-            type="button"
-            onClick={signInWithGoogle}
-            disabled={busy}
-            className="mt-6 w-full rounded-md bg-[#2b4c7e] px-5 py-4 text-sm font-black text-white hover:bg-[#1e3a63] disabled:opacity-50"
-          >
-            {busy ? '接続を確認しています…' : `${allowedEmail} でGoogleログイン`}
-          </button>
+          {googleLoginEnabled ? (
+            <button
+              type="button"
+              onClick={signInWithGoogle}
+              disabled={busy}
+              className="mt-6 w-full rounded-md bg-[#2b4c7e] px-5 py-4 text-sm font-black text-white hover:bg-[#1e3a63] disabled:opacity-50"
+            >
+              {busy ? '接続を確認しています…' : `${allowedEmail} でGoogleログイン`}
+            </button>
+          ) : (
+            <p className="mt-6 rounded-md bg-amber-50 px-4 py-3 text-sm font-bold leading-6 text-amber-900">
+              Googleログインは設定中です。現在は下のメールログインを利用できます。
+            </p>
+          )}
           <button
             type="button"
             onClick={signInWithEmail}
@@ -244,6 +262,7 @@ export default function SalesAgentGate() {
     <SalesAgent
       userEmail={email}
       gmailConnected={gmailStatus.connected && gmailStatus.canSend}
+      googleAuthEnabled={googleLoginEnabled}
       onReconnectGoogle={signInWithGoogle}
       onSignOut={signOut}
     />

@@ -77,11 +77,12 @@ const steps = [
 type SalesAgentProps = {
   userEmail: string
   gmailConnected: boolean
+  googleAuthEnabled: boolean
   onReconnectGoogle: () => void
   onSignOut: () => void
 }
 
-export default function SalesAgent({ userEmail, gmailConnected, onReconnectGoogle, onSignOut }: SalesAgentProps) {
+export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnabled, onReconnectGoogle, onSignOut }: SalesAgentProps) {
   const [step, setStep] = useState(1)
   const [siteUrl, setSiteUrl] = useState('')
   const [analysis, setAnalysis] = useState<SiteAnalysis | null>(null)
@@ -751,10 +752,14 @@ export default function SalesAgent({ userEmail, gmailConnected, onReconnectGoogl
                   <div>
                     <p className="text-sm font-black">送信元: {userEmail}</p>
                     <p className="mt-1 text-xs font-bold">
-                      {gmailConnected ? 'Gmail送信権限を確認済みです。承認するまで送信しません。' : '実メール送信にはGmail権限の再接続が必要です。'}
+                      {gmailConnected
+                        ? 'Gmail送信権限を確認済みです。承認するまで送信しません。'
+                        : googleAuthEnabled
+                          ? '実メール送信にはGmail権限の再接続が必要です。'
+                          : 'Gmail送信連携は設定中です。設定完了までは送信ボタンを利用できません。'}
                     </p>
                   </div>
-                  {!gmailConnected && (
+                  {!gmailConnected && googleAuthEnabled && (
                     <button type="button" onClick={onReconnectGoogle} className="inline-flex items-center justify-center gap-2 rounded-md bg-amber-900 px-4 py-3 text-sm font-black text-white">
                       <RefreshCw size={16} /> Gmailを再接続
                     </button>
