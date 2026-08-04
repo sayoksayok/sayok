@@ -8,8 +8,12 @@ import { supabase } from '@/lib/supabase';
 
 const salesAgentEmail = (process.env.NEXT_PUBLIC_SALES_AGENT_ALLOWED_EMAIL || 'yudai@looq.icu').toLowerCase();
 
-async function persistSalesGoogleConnection(session: Session) {
-  if (session.user.email?.toLowerCase() !== salesAgentEmail || !session.provider_token) return;
+async function persistSalesGoogleConnection(
+  session: Session,
+  providerToken = session.provider_token,
+  providerRefreshToken = session.provider_refresh_token,
+) {
+  if (session.user.email?.toLowerCase() !== salesAgentEmail || !providerToken) return;
 
   const response = await fetch('/api/sales-agent/google/connect', {
     method: 'POST',
@@ -18,8 +22,8 @@ async function persistSalesGoogleConnection(session: Session) {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      accessToken: session.provider_token,
-      refreshToken: session.provider_refresh_token,
+      accessToken: providerToken,
+      refreshToken: providerRefreshToken,
       expiresAt: session.expires_at ? new Date(session.expires_at * 1000).toISOString() : undefined,
     }),
   });
@@ -73,6 +77,8 @@ export default function AuthCallbackClient() {
       }
       const accessToken = params.get('access_token');
       const refreshToken = params.get('refresh_token');
+      const providerToken = params.get('provider_token') || undefined;
+      const providerRefreshToken = params.get('provider_refresh_token') || undefined;
       if (accessToken && refreshToken) {
         supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken }).then(async ({ data, error }) => {
           if (error) {
@@ -80,7 +86,7 @@ export default function AuthCallbackClient() {
             setStatus('error');
             return;
           }
-          if (data.session) await persistSalesGoogleConnection(data.session);
+          if (data.session) await persistSalesGoogleConnection(data.session, providerToken, providerRefreshToken);
           setStatus('done');
           window.location.href = nextPath;
         }).catch(() => setStatus('error'));
