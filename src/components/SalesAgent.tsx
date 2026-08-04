@@ -952,9 +952,9 @@ function validateContact(contact: Contact | null, lead: Lead, targetMarket: stri
   if (!/^[a-z0-9][a-z0-9._%+-]*@[a-z0-9.-]+\.[a-z]{2,}$/.test(email)) return { ok: false, flags: ['形式不正'] }
   const [local, domain] = email.split('@')
   if (
-    /^(x{3,}|example|sample|test|yourname|name|email|user)$/i.test(local)
+    /^(x{3,}|example|sample|test|yourname|youremail|your-email|name|email|user|usuario|seu|seunome|seuemail)$/i.test(local)
     || /(^|\.)(x{2,}|example|sample|test|localhost)(\.|$)/i.test(domain)
-    || ['example.com', 'example.org', 'example.net', 'sample.com', 'test.com', 'mailinator.com'].includes(domain)
+    || ['domain.com', 'email.com', 'example.com', 'example.org', 'example.net', 'sample.com', 'test.com', 'mailinator.com'].includes(domain)
   ) {
     return { ok: false, flags: ['ダミーアドレス'] }
   }
@@ -1018,6 +1018,13 @@ function registeredDomain(value: string) {
 function isObviousMarketMismatch(lead: Lead, targetMarket: string) {
   const market = targetMarket.trim().toLowerCase()
   const host = safeHost(lead.organizationWebsite)
+  if (['japan', 'jp', '日本', '日本企業', 'japanese market'].includes(market)) {
+    if (host.endsWith('.jp')) return false
+    const suffix = host.split('.').pop() || ''
+    if (suffix.length === 2 && !['ai', 'co', 'fm', 'io', 'me', 'tv'].includes(suffix)) return true
+    const evidence = `${lead.organizationName} ${lead.reasonForFit} ${lead.country} ${host}`
+    return !/[ぁ-んァ-ヶ一-龠々]|\b(?:japan|tokyo|osaka|kyoto|yokohama|nagoya|fukuoka)\b/i.test(evidence)
+  }
   if (['usa', 'us', 'united states', 'america', 'u.s.', 'u.s.a.'].includes(market) && host.endsWith('.jp')) return true
   if (['uk', 'united kingdom', 'britain'].includes(market) && host.endsWith('.jp')) return true
   return false

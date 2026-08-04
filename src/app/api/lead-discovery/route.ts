@@ -377,9 +377,22 @@ function buildBasicAnalysis(input: LeadDiscoveryInput, website: { title: string;
 function expandSearchQueries(input: LeadDiscoveryInput, queries: string[]) {
   const target = input.targetMarket
   const goal = input.goal
+  const primaryGoal = goal.split(/\.\s*Ideal customers:/i)[0]?.trim() || goal
   const normalized = `${goal} ${target}`.toLowerCase()
   const priority = new Set<string>()
   const additions = new Set<string>()
+
+  if (isJapanMarket(target)) {
+    priority.add(`site:co.jp ${primaryGoal} お問い合わせ`)
+    priority.add(`site:jp ${primaryGoal} 会社概要`)
+    priority.add(`日本企業 ${primaryGoal} 法人 お問い合わせ`)
+
+    if (/広告|agency|marketing|ooh|media/.test(normalized)) {
+      priority.add('site:co.jp 広告代理店 お問い合わせ')
+      priority.add('site:co.jp OOH 広告 代理店 会社概要')
+      priority.add('site:jp デジタル広告 代理店 法人 お問い合わせ')
+    }
+  }
 
   priority.add(`${goal} ${target} organizations contact email`)
   priority.add(`${goal} ${target} partnerships contact`)
@@ -432,7 +445,7 @@ function expandSearchQueries(input: LeadDiscoveryInput, queries: string[]) {
 }
 
 async function searchBrave(queries: string[], maxLeads: number, targetMarket: string, keys: RuntimeKeys) {
-  if (!keys.braveSearchApiKey) return searchPublicWeb(queries, maxLeads)
+  if (!keys.braveSearchApiKey) return searchPublicWeb(queries, maxLeads, targetMarket)
 
   const results: BraveResult[] = []
 
@@ -440,7 +453,7 @@ async function searchBrave(queries: string[], maxLeads: number, targetMarket: st
     const url = new URL('https://api.search.brave.com/res/v1/web/search')
     url.searchParams.set('q', query)
     url.searchParams.set('count', '8')
-    url.searchParams.set('search_lang', 'en')
+    url.searchParams.set('search_lang', isJapanMarket(targetMarket) ? 'ja' : 'en')
     const country = braveCountry(targetMarket)
     if (country) url.searchParams.set('country', country)
 
@@ -454,10 +467,10 @@ async function searchBrave(queries: string[], maxLeads: number, targetMarket: st
     if (!response.ok) throw new Error(`Brave Search failed for "${query}" with ${response.status}.`)
     const data = (await response.json()) as { web?: { results?: BraveResult[] } }
     results.push(...(data.web?.results || []))
-    if (index >= 4 && uniqueOrganizationResults(results).length >= maxLeads * 2) break
+    if (index >= 4 && uniqueOrganizationResults(results, targetMarket).length >= maxLeads * 2) break
   }
 
-  return uniqueOrganizationResults(results).sort((a, b) => searchResultScore(b) - searchResultScore(a)).slice(0, maxLeads * 2)
+  return uniqueOrganizationResults(results, targetMarket).sort((a, b) => searchResultScore(b) - searchResultScore(a)).slice(0, maxLeads * 2)
 }
 
 function braveCountry(targetMarket: string) {
@@ -470,21 +483,21 @@ function braveCountry(targetMarket: string) {
   return ''
 }
 
-async function searchPublicWeb(queries: string[], maxLeads: number) {
+async function searchPublicWeb(queries: string[], maxLeads: number, targetMarket: string) {
   const results: BraveResult[] = []
 
   for (const query of queries.slice(0, 8)) {
     results.push(...(await searchDuckDuckGo(query)))
-    if (uniqueOrganizationResults(results).length < maxLeads) {
+    if (uniqueOrganizationResults(results, targetMarket).length < maxLeads) {
       results.push(...(await searchYahoo(query)))
     }
-    if (uniqueOrganizationResults(results).length < maxLeads) {
+    if (uniqueOrganizationResults(results, targetMarket).length < maxLeads) {
       results.push(...(await searchBing(query)))
     }
-    if (uniqueOrganizationResults(results).length >= maxLeads) break
+    if (uniqueOrganizationResults(results, targetMarket).length >= maxLeads) break
   }
 
-  return uniqueOrganizationResults(results).sort((a, b) => searchResultScore(b) - searchResultScore(a)).slice(0, maxLeads)
+  return uniqueOrganizationResults(results, targetMarket).sort((a, b) => searchResultScore(b) - searchResultScore(a)).slice(0, maxLeads)
 }
 
 async function searchDuckDuckGo(query: string) {
@@ -609,7 +622,7 @@ function unwrapSearchUrl(rawUrl: string) {
   }
 }
 
-function uniqueOrganizationResults(results: BraveResult[]) {
+function uniqueOrganizationResults(results: BraveResult[], targetMarket = '') {
   const seen = new Set<string>()
   const unique: BraveResult[] = []
 
@@ -619,6 +632,7 @@ function uniqueOrganizationResults(results: BraveResult[]) {
     const domain = extractDomain(url)
     if (!domain || isBlockedDomain(domain)) continue
     if (isBlockedResult({ ...result, url })) continue
+    if (!isResultInTargetMarket({ ...result, url }, targetMarket)) continue
     const key = domain.replace(/^www\./, '')
     if (seen.has(key)) continue
     seen.add(key)
@@ -626,6 +640,30 @@ function uniqueOrganizationResults(results: BraveResult[]) {
   }
 
   return unique
+}
+
+function isJapanMarket(targetMarket: string) {
+  const value = targetMarket.trim().toLowerCase()
+  return ['japan', 'jp', '日本', '日本企業', 'japanese market'].includes(value)
+    || /(^|\s)(japan|日本)(\s|$)/i.test(value)
+}
+
+function isResultInTargetMarket(result: BraveResult, targetMarket: string) {
+  if (!isJapanMarket(targetMarket)) return true
+
+  const host = extractDomain(result.url || '').replace(/^www\./, '').toLowerCase()
+  if (!host) return false
+  if (host === 'jp' || host.endsWith('.jp')) return true
+
+  const suffix = host.split('.').pop() || ''
+  const globallyUsedCountrySuffixes = new Set(['ai', 'co', 'fm', 'io', 'me', 'tv'])
+  if (suffix.length === 2 && !globallyUsedCountrySuffixes.has(suffix)) return false
+
+  const text = `${result.title || ''} ${result.description || ''} ${host}`
+  const hasJapaneseText = /[ぁ-んァ-ヶ一-龠々]/u.test(text)
+  const hasJapanLocation = /(?:^|[\s,|()\-])(japan|tokyo|osaka|kyoto|yokohama|nagoya|fukuoka|日本|東京|大阪|京都|横浜|名古屋|福岡)(?:$|[\s,|()\-])/iu.test(text)
+  const hasJapaneseCompanyMarker = /株式会社|合同会社|有限会社|一般社団法人|公益社団法人/u.test(text)
+  return hasJapaneseText || hasJapanLocation || hasJapaneseCompanyMarker || /japan/i.test(host)
 }
 
 function isBlockedDomain(domain: string) {
@@ -654,6 +692,7 @@ async function scoreLeads(input: LeadDiscoveryInput, analysis: WebsiteAnalysis, 
   const excludedTerms = extractExcludedClientTerms(input)
   const usableResults = results
     .filter((result) => !isBlockedResult(result) && !isBlockedDomain(extractDomain(result.url || '')))
+    .filter((result) => isResultInTargetMarket(result, input.targetMarket))
     .filter((result) => !matchesExcludedClient(result, excludedTerms))
     .sort((a, b) => searchResultScore(b) - searchResultScore(a))
   if (usableResults.length === 0) return []
@@ -682,7 +721,7 @@ Do not return the user's past/existing clients as new leads. Excluded past/exist
 Candidates:
 ${JSON.stringify(candidates, null, 2)}
 
-Use only the provided candidates. Do not create new organizations. Return 12 to 18 candidates when enough real candidates exist. Exclude the user's past/existing clients, encyclopedias, search portals, social networks, job boards, generic directories, and pages with no practical outreach value.
+Use only the provided candidates. Do not create new organizations. Return 12 to 18 candidates when enough real candidates exist. The target market is a hard location filter: do not label a company as being in the target country merely because the query mentioned that country. Exclude foreign-country domains and candidates without location evidence. Exclude the user's past/existing clients, encyclopedias, search portals, social networks, job boards, generic directories, and pages with no practical outreach value.
 
 Return JSON:
 {
@@ -955,8 +994,9 @@ function isBlockedEmail(email: string) {
     /@\S+\.(png|jpg|jpeg|gif|webp|svg)$/i.test(email) ||
     /^(abuse|admin|careers?|compliance|copyright|devnull|donotreply|jobs?|legal|no-?reply|phishing|postmaster|privacy|report|security|support|webmaster)/i.test(local) ||
     /^[a-z]{1,3}\d{2,}$/i.test(local) ||
+    /^(example|sample|test|yourname|youremail|your-email|name|email|user|usuario|seu|seunome|seuemail)$/i.test(local) ||
     email === 'user@domain.com' ||
-    domain === 'domain.com' ||
+    ['domain.com', 'email.com', 'example.org', 'example.net', 'sample.com', 'test.com'].includes(domain) ||
     email.includes('example.com') ||
     email.includes('test.com') ||
     email.includes('sentry.io') ||
@@ -1117,6 +1157,11 @@ function prioritizeActionableLeads(leads: Lead[], contacts: Contact[], input: Le
       description: lead.reasonForFit,
       url: lead.organizationWebsite,
     }))
+    .filter((lead) => isResultInTargetMarket({
+      title: lead.organizationName,
+      description: lead.reasonForFit,
+      url: lead.sourceUrl || lead.organizationWebsite,
+    }, input.targetMarket))
     .filter((lead) => !matchesExcludedLead(lead, excludedTerms))
 
   return usable
