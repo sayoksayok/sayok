@@ -75,8 +75,10 @@ type SendHistoryItem = {
   gmailMessageId: string
 }
 
-const STORAGE_KEY = 'sayok:sales-agent:v1'
-const PROFILE_KEY = 'sayok:sales-profile:v2'
+const LEGACY_STORAGE_KEY = 'sayok:sales-agent:v1'
+const STORAGE_KEY = 'sayok:sales-agent:v2'
+const LEGACY_PROFILE_KEY = 'sayok:sales-profile:v2'
+const PROFILE_KEY = 'sayok:sales-profile:v3'
 const BULK_CONFIRM_ID = '__bulk_send__'
 const BULK_TEMPLATE_VERSION = 3
 const SALES_DECK_DRIVE_URL = 'https://drive.google.com/file/d/1p5NZiJnWU2CrnBmn2tb82iZbre7W0x9G/view?usp=sharing'
@@ -149,8 +151,11 @@ type SalesAgentProps = {
 }
 
 export default function SalesAgent({ userId, userEmail, userName, initialProfile, gmailConnected, googleAuthEnabled, onReconnectGoogle, onSignOut }: SalesAgentProps) {
-  const [defaultProfile] = useState(() => profileForUser(userEmail, userName, initialProfile))
-  const [defaultBulkTemplate] = useState(() => bulkTemplateForUser(userEmail))
+  const defaultProfile = useMemo(
+    () => profileForUser(userEmail, userName, initialProfile),
+    [initialProfile, userEmail, userName],
+  )
+  const defaultBulkTemplate = useMemo(() => bulkTemplateForUser(userEmail), [userEmail])
   const storageKey = `${STORAGE_KEY}:${userId}`
   const profileKey = `${PROFILE_KEY}:${userId}`
   const [step, setStep] = useState(1)
@@ -171,7 +176,7 @@ export default function SalesAgent({ userId, userEmail, userName, initialProfile
   const [notice, setNotice] = useState('')
   const [confirmId, setConfirmId] = useState('')
   const [copied, setCopied] = useState('')
-  const [hydrated, setHydrated] = useState(false)
+  const [hydratedStorageKey, setHydratedStorageKey] = useState('')
   const [sendHistory, setSendHistory] = useState<SendHistoryItem[]>([])
   const [historyOpen, setHistoryOpen] = useState(false)
   const [historyBusy, setHistoryBusy] = useState(true)
@@ -180,10 +185,40 @@ export default function SalesAgent({ userId, userEmail, userName, initialProfile
   const [verifiedLeadImport, setVerifiedLeadImport] = useState('')
   const [profileSaveBusy, setProfileSaveBusy] = useState(false)
   const [profileSaved, setProfileSaved] = useState(false)
+  const hydrated = hydratedStorageKey === storageKey
 
   useEffect(() => {
+    setHydratedStorageKey('')
+    setStep(1)
+    setSiteUrl('')
+    setAnalysis(null)
+    setTargetMarket('')
+    setGoal('')
+    setHint('')
+    setCount(8)
+    setResult(null)
+    setProfile(defaultProfile)
+    setDrafts({})
+    setBulkTemplate(defaultBulkTemplate)
+    setExcludedIds([])
+    setBusy('')
+    setDraftingId('')
+    setError('')
+    setNotice('')
+    setConfirmId('')
+    setCopied('')
+    setSendHistory([])
+    setHistoryOpen(false)
+    setHistoryBusy(true)
+    setHistoryError('')
+    setVerifiedLeadImport('')
+    setProfileSaveBusy(false)
+    setProfileSaved(false)
+
     try {
-      const legacyProfile = userEmail === 'yudai@looq.icu' ? localStorage.getItem(PROFILE_KEY) : null
+      const legacyProfile = userEmail === 'yudai@looq.icu'
+        ? localStorage.getItem(`${LEGACY_PROFILE_KEY}:${userId}`) || localStorage.getItem(LEGACY_PROFILE_KEY)
+        : null
       const savedProfile = localStorage.getItem(profileKey) || legacyProfile
       if (savedProfile) setProfile({ ...defaultProfile, ...JSON.parse(savedProfile) })
     } catch {
@@ -191,7 +226,9 @@ export default function SalesAgent({ userId, userEmail, userName, initialProfile
     }
 
     try {
-      const legacyWorkspace = userEmail === 'yudai@looq.icu' ? localStorage.getItem(STORAGE_KEY) : null
+      const legacyWorkspace = userEmail === 'yudai@looq.icu'
+        ? localStorage.getItem(`${LEGACY_STORAGE_KEY}:${userId}`) || localStorage.getItem(LEGACY_STORAGE_KEY)
+        : null
       const savedWorkspace = localStorage.getItem(storageKey) || legacyWorkspace
       if (savedWorkspace) {
         const saved = JSON.parse(savedWorkspace) as {
@@ -228,7 +265,7 @@ export default function SalesAgent({ userId, userEmail, userName, initialProfile
     } catch {
       localStorage.removeItem(storageKey)
     } finally {
-      setHydrated(true)
+      setHydratedStorageKey(storageKey)
     }
   }, [defaultBulkTemplate, defaultProfile, profileKey, storageKey, userEmail])
 
