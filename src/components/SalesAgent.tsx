@@ -282,10 +282,11 @@ export default function SalesAgent({ userId, userEmail, userName, initialProfile
         setHint(saved.hint || '')
         if (saved.count && [5, 8, 10, 14].includes(saved.count)) setCount(saved.count)
         setResult(currentLeadQuality ? saved.result || null : null)
-        setDrafts(currentLeadQuality
+        const currentBulkTemplate = saved.bulkTemplateVersion === BULK_TEMPLATE_VERSION
+        setDrafts(currentLeadQuality && currentBulkTemplate
           ? Object.fromEntries(Object.entries(saved.drafts || {}).map(([leadId, draft]) => [leadId, draft]))
           : {})
-        setBulkTemplate(saved.bulkTemplateVersion === BULK_TEMPLATE_VERSION
+        setBulkTemplate(currentBulkTemplate
           ? { ...defaultBulkTemplate, ...saved.bulkTemplate }
           : defaultBulkTemplate)
         setExcludedIds(currentLeadQuality ? saved.excludedIds || [] : [])
