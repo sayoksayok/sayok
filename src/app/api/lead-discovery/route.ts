@@ -82,7 +82,7 @@ const DEFAULT_CAMPAIGN: LeadCampaign = {
   id: 'default',
   label: 'General lead discovery',
   brief: '',
-  minConfidence: 0.25,
+  minConfidence: 0.6,
   excludedTerms: [],
   excludedDomains: [],
 }
@@ -245,11 +245,14 @@ export async function POST(request: NextRequest) {
         brave: keys.braveSearchApiKey ? 'connected' : 'public_search',
         hunter: keys.hunterApiKey ? 'connected' : 'public_email_extract',
         apollo: keys.apolloApiKey ? (apolloWarning ? 'attempted_with_warning' : 'connected') : 'not_configured_optional',
-        llm: keys.anthropicApiKey ? 'connected' : 'basic_fallback',
+        llm: keys.anthropicApiKey ? 'connected' : 'qualification_unavailable',
       },
       warnings: [
         ...hunterWarnings,
         ...(apolloWarning ? [apolloWarning] : []),
+        ...(!keys.anthropicApiKey
+          ? ['AI qualification is unavailable. Unqualified search results were not shown.']
+          : []),
         ...campaignWarnings(campaign, finalLeads.length, input.maxLeads ?? 14),
       ],
       campaignId: campaign.id,
@@ -274,7 +277,7 @@ function resolveLeadCampaign(input: LeadDiscoveryInput, userEmail: string): Lead
   const isOwnTheDoge = userEmail.trim().toLowerCase() === 'dogejapan@ownthedoge.com'
     || /own\s*the\s*doge|ownthedoge\.com/.test(identity)
   const isDogeDaySponsorship = /doge\s*day|dogeday/.test(goal)
-    && /sponsor|sponsorship|協賛/.test(goal)
+    || (isOwnTheDoge && /sponsor|sponsorship|協賛/.test(goal))
   return isOwnTheDoge && isDogeDaySponsorship ? DOGEDAY_CAMPAIGN : DEFAULT_CAMPAIGN
 }
 
@@ -786,10 +789,12 @@ function isJapanMarket(targetMarket: string) {
 }
 
 function isResultInTargetMarket(result: BraveResult, targetMarket: string) {
-  if (!isJapanMarket(targetMarket)) return true
-
   const host = extractDomain(result.url || '').replace(/^www\./, '').toLowerCase()
   if (!host) return false
+  const targetCountry = targetMarketCountryCode(targetMarket)
+  const domainCountry = domainCountryCode(host)
+  if (targetCountry && domainCountry && targetCountry !== domainCountry) return false
+  if (!isJapanMarket(targetMarket)) return true
   if (host === 'jp' || host.endsWith('.jp')) return true
 
   const suffix = host.split('.').pop() || ''
@@ -801,6 +806,28 @@ function isResultInTargetMarket(result: BraveResult, targetMarket: string) {
   const hasJapanLocation = /(?:^|[\s,|()\-])(japan|tokyo|osaka|kyoto|yokohama|nagoya|fukuoka|日本|東京|大阪|京都|横浜|名古屋|福岡)(?:$|[\s,|()\-])/iu.test(text)
   const hasJapaneseCompanyMarker = /株式会社|合同会社|有限会社|一般社団法人|公益社団法人/u.test(text)
   return hasJapaneseText || hasJapanLocation || hasJapaneseCompanyMarker || /japan/i.test(host)
+}
+
+function targetMarketCountryCode(targetMarket: string) {
+  const value = targetMarket.trim().toLowerCase()
+  if (['usa', 'us', 'united states', 'america', 'u.s.', 'u.s.a.'].includes(value)) return 'US'
+  if (['japan', 'jp', '日本', '日本企業', 'japanese market'].includes(value)) return 'JP'
+  if (['uk', 'united kingdom', 'britain', 'great britain'].includes(value)) return 'GB'
+  if (['canada', 'ca'].includes(value)) return 'CA'
+  if (['australia', 'au'].includes(value)) return 'AU'
+  return ''
+}
+
+function domainCountryCode(host: string) {
+  const suffix = host.toLowerCase().split('.').pop() || ''
+  const codes: Record<string, string> = {
+    us: 'US', jp: 'JP', uk: 'GB', ca: 'CA', au: 'AU', de: 'DE', fr: 'FR', it: 'IT', es: 'ES',
+    nl: 'NL', be: 'BE', ch: 'CH', at: 'AT', ie: 'IE', nz: 'NZ', sg: 'SG', in: 'IN', kr: 'KR',
+    cn: 'CN', hk: 'HK', tw: 'TW', br: 'BR', mx: 'MX', se: 'SE', no: 'NO', dk: 'DK', fi: 'FI',
+    pl: 'PL', pt: 'PT', cz: 'CZ', gr: 'GR', za: 'ZA', ae: 'AE', sa: 'SA', id: 'ID', my: 'MY',
+    th: 'TH', vn: 'VN', ph: 'PH',
+  }
+  return codes[suffix] || ''
 }
 
 function isBlockedDomain(domain: string) {
@@ -890,9 +917,7 @@ async function scoreLeads(
   if (usableResults.length === 0) return []
 
   if (!keys.anthropicApiKey) {
-    return dedupeLeadsByOrganization(
-      usableResults.map((result, index) => resultToLead(result, index, input, campaign)),
-    ).slice(0, input.maxLeads ?? 14)
+    return []
   }
 
   const candidates = usableResults.map((result, index) => ({
@@ -945,9 +970,7 @@ Return JSON:
     const data = await callClaude(prompt, 3500, keys)
     parsed = parseJson<{ leads?: Partial<Lead>[] }>(data)
   } catch {
-    return dedupeLeadsByOrganization(
-      usableResults.map((result, index) => resultToLead(result, index, input, campaign)),
-    ).slice(0, input.maxLeads ?? 14)
+    return []
   }
   const byId = new Map(candidates.map((candidate) => [candidate.id, candidate]))
 
@@ -987,21 +1010,7 @@ Return JSON:
     .filter((lead) => !matchesExcludedLead(lead, excludedTerms))
     .filter((lead) => isCampaignResultEligible({ title: lead.organizationName, description: lead.reasonForFit, url: lead.sourceUrl || lead.organizationWebsite }, campaign))
 
-  if (campaign.id === 'dogeday_2026_sponsorship') {
-    return dedupeLeadsByOrganization(qualified).slice(0, input.maxLeads ?? 14)
-  }
-
-  const qualifiedDomains = new Set(qualified.map((lead) => canonicalOrganizationDomain(lead.organizationWebsite)))
-  const supplemental = usableResults
-    .map((result, index) => resultToLead(result, index + qualified.length, input, campaign))
-    .filter((lead) => {
-      const domain = canonicalOrganizationDomain(lead.organizationWebsite)
-      if (!domain || qualifiedDomains.has(domain)) return false
-      qualifiedDomains.add(domain)
-      return !matchesExcludedLead(lead, excludedTerms)
-    })
-
-  return dedupeLeadsByOrganization([...qualified, ...supplemental]).slice(0, 18)
+  return dedupeLeadsByOrganization(qualified).slice(0, input.maxLeads ?? 14)
 }
 
 function extractExcludedClientTerms(input: LeadDiscoveryInput) {
@@ -1055,38 +1064,6 @@ function matchesExcludedLead(lead: Lead, excludedTerms: string[]) {
   }, excludedTerms)
 }
 
-function resultToLead(
-  result: BraveResult,
-  index: number,
-  input: LeadDiscoveryInput,
-  campaign: LeadCampaign = DEFAULT_CAMPAIGN,
-): Lead {
-  const organizationName = cleanTitle(result.title || extractDomain(result.url || '') || `Lead ${index + 1}`)
-  const domain = canonicalOrganizationDomain(result.url || '')
-  const campaignScore = searchResultScore(result, campaign)
-  const relationshipType = campaign.id === 'dogeday_2026_sponsorship'
-    ? dogeDayRelationshipType(result, campaign)
-    : undefined
-  return {
-    id: `lead_${index + 1}`,
-    organizationName,
-    organizationWebsite: normalizeHomepage(result.url || ''),
-    category: relationshipType && relationshipType !== 'reject'
-      ? relationshipType
-      : inferLeadCategory(`${result.title || ''} ${result.description || ''} ${result.url || ''}`),
-    country: input.targetMarket,
-    reasonForFit: campaign.id === 'dogeday_2026_sponsorship'
-      ? dogeDayReason(result, relationshipType === 'reject' ? undefined : relationshipType)
-      : result.description || `${input.targetMarket}の営業候補として、${domain || organizationName}の公式サイトを公開検索で確認しました。`,
-    sourceUrl: result.url || '',
-    confidence: campaign.id === 'dogeday_2026_sponsorship'
-      ? clampConfidence(0.58 + Math.min(Math.max(campaignScore - 4, 0), 6) * 0.04)
-      : 0.5,
-    status: 'found',
-    relationshipType: relationshipType === 'reject' ? undefined : relationshipType,
-  }
-}
-
 function normalizeDogeDayRelationshipType(value: unknown, candidate: BraveResult) {
   const supplied = String(value || '').trim().toLowerCase()
   if (['cash_sponsor', 'activation_partner', 'media_partner'].includes(supplied)) {
@@ -1119,17 +1096,6 @@ function dedupeLeadsByOrganization(leads: Lead[]) {
     seen.add(key)
     return true
   })
-}
-
-function inferLeadCategory(value: string) {
-  const text = value.toLowerCase()
-  if (/university|college|school|language program|department/.test(text)) return 'school'
-  if (/association|society|organization/.test(text)) return 'association'
-  if (/event|conference|expo|summit/.test(text)) return 'event'
-  if (/agency|marketing|consulting|広告代理店|広告会社|マーケティング/.test(text)) return 'agency'
-  if (/distributor|wholesale|importer|retail/.test(text)) return 'distributor'
-  if (/community|club|meetup/.test(text)) return 'community'
-  return 'organization'
 }
 
 async function discoverContacts(leads: Lead[], keys: RuntimeKeys, campaign: LeadCampaign = DEFAULT_CAMPAIGN) {

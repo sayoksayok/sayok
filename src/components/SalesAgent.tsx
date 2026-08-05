@@ -81,7 +81,7 @@ const LEGACY_PROFILE_KEY = 'sayok:sales-profile:v2'
 const PROFILE_KEY = 'sayok:sales-profile:v3'
 const BULK_CONFIRM_ID = '__bulk_send__'
 const BULK_TEMPLATE_VERSION = 5
-const LEAD_QUALITY_VERSION = 3
+const LEAD_QUALITY_VERSION = 4
 const SALES_DECK_DRIVE_URL = 'https://drive.google.com/file/d/1p5NZiJnWU2CrnBmn2tb82iZbre7W0x9G/view?usp=sharing'
 const DOGEDAY_DECK_DRIVE_URL = 'https://drive.google.com/file/d/1_wuTyBDHFicPemao96BZ6k0w14mXD2IN/view?usp=sharing'
 const DOGEDAY_2023_URL = 'https://youtu.be/4-Xrxocl904?si=e6G5Y1TmzM7nX03n'
@@ -489,10 +489,13 @@ export default function SalesAgent({ userId, userEmail, userName, initialProfile
       })
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || '見込み客を探せませんでした。')
-      setResult(data as LeadDiscoveryResult)
+      const leadResult = data as LeadDiscoveryResult
+      setResult(leadResult)
       setDrafts({})
       setExcludedIds([])
-      setNotice('検索が完了しました。出典を確認できる連絡先だけを送信候補にしています。')
+      setNotice(leadResult.leads.length > 0
+        ? '検索が完了しました。出典を確認できる連絡先だけを送信候補にしています。'
+        : '条件に合う営業先を確認できませんでした。関係ない候補で件数を穴埋めはしていません。条件を変えて再検索してください。')
     } catch (err) {
       setError(err instanceof Error ? err.message : '見込み客を探せませんでした。')
     } finally {
@@ -1727,6 +1730,9 @@ function registeredDomain(value: string) {
 function isObviousMarketMismatch(lead: Lead, targetMarket: string) {
   const market = targetMarket.trim().toLowerCase()
   const host = safeHost(lead.organizationWebsite)
+  const targetCountry = clientTargetMarketCountryCode(market)
+  const domainCountry = clientDomainCountryCode(host)
+  if (targetCountry && domainCountry && targetCountry !== domainCountry) return true
   if (['japan', 'jp', '日本', '日本企業', 'japanese market'].includes(market)) {
     if (host.endsWith('.jp')) return false
     const suffix = host.split('.').pop() || ''
@@ -1734,9 +1740,28 @@ function isObviousMarketMismatch(lead: Lead, targetMarket: string) {
     const evidence = `${lead.organizationName} ${lead.reasonForFit} ${lead.country} ${host}`
     return !/[ぁ-んァ-ヶ一-龠々]|\b(?:japan|tokyo|osaka|kyoto|yokohama|nagoya|fukuoka)\b/i.test(evidence)
   }
-  if (['usa', 'us', 'united states', 'america', 'u.s.', 'u.s.a.'].includes(market) && host.endsWith('.jp')) return true
-  if (['uk', 'united kingdom', 'britain'].includes(market) && host.endsWith('.jp')) return true
   return false
+}
+
+function clientTargetMarketCountryCode(market: string) {
+  if (['usa', 'us', 'united states', 'america', 'u.s.', 'u.s.a.'].includes(market)) return 'US'
+  if (['japan', 'jp', '日本', '日本企業', 'japanese market'].includes(market)) return 'JP'
+  if (['uk', 'united kingdom', 'britain', 'great britain'].includes(market)) return 'GB'
+  if (['canada', 'ca'].includes(market)) return 'CA'
+  if (['australia', 'au'].includes(market)) return 'AU'
+  return ''
+}
+
+function clientDomainCountryCode(host: string) {
+  const suffix = host.toLowerCase().split('.').pop() || ''
+  const codes: Record<string, string> = {
+    us: 'US', jp: 'JP', uk: 'GB', ca: 'CA', au: 'AU', de: 'DE', fr: 'FR', it: 'IT', es: 'ES',
+    nl: 'NL', be: 'BE', ch: 'CH', at: 'AT', ie: 'IE', nz: 'NZ', sg: 'SG', in: 'IN', kr: 'KR',
+    cn: 'CN', hk: 'HK', tw: 'TW', br: 'BR', mx: 'MX', se: 'SE', no: 'NO', dk: 'DK', fi: 'FI',
+    pl: 'PL', pt: 'PT', cz: 'CZ', gr: 'GR', za: 'ZA', ae: 'AE', sa: 'SA', id: 'ID', my: 'MY',
+    th: 'TH', vn: 'VN', ph: 'PH',
+  }
+  return codes[suffix] || ''
 }
 
 function cleanOrganizationName(lead: Lead) {
