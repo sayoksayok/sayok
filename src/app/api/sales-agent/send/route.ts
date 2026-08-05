@@ -210,7 +210,24 @@ function validateSendInput(input: SendInput | null) {
   if (['example.com', 'example.org', 'example.net', 'sample.com', 'test.com', 'mailinator.com'].includes(domain)) {
     return 'デモ用アドレスには送信できません。'
   }
+  if (['support', 'privacy', 'recruit', 'recruiting', 'jobs', 'career'].includes(local)) {
+    return '営業窓口ではないアドレスには送信できません。'
+  }
+  const sourceDomain = registeredDomain(new URL(input.sourceUrl).hostname)
+  const emailDomain = registeredDomain(domain)
+  if (!sourceDomain || !emailDomain || sourceDomain !== emailDomain) {
+    return 'メール掲載元と宛先の企業ドメインが一致しません。'
+  }
   return ''
+}
+
+function registeredDomain(value: string) {
+  const parts = value.toLowerCase().replace(/^www\./, '').split('.').filter(Boolean)
+  const suffix = parts.slice(-2).join('.')
+  if (['co.jp', 'ac.jp', 'go.jp', 'ne.jp', 'or.jp', 'co.uk', 'org.uk', 'ac.uk', 'com.au', 'edu.au'].includes(suffix)) {
+    return parts.slice(-3).join('.')
+  }
+  return parts.slice(-2).join('.')
 }
 
 function isPublicHttpUrl(value: string) {

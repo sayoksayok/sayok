@@ -151,6 +151,7 @@ export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnable
   const [historyBusy, setHistoryBusy] = useState(true)
   const [historyError, setHistoryError] = useState('')
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0)
+  const [verifiedLeadImport, setVerifiedLeadImport] = useState('')
 
   useEffect(() => {
     try {
@@ -360,6 +361,115 @@ export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnable
     } finally {
       setBusy('')
     }
+  }
+
+  function importVerifiedLeads() {
+    const rows = verifiedLeadImport
+      .split(/\r?\n/)
+      .map((line) => line.split('\t').map((value) => value.trim()))
+      .filter((columns) => columns.some(Boolean))
+
+    if (!rows.length) {
+      setError('公式サイトで確認した営業先を1行以上入力してください。')
+      return
+    }
+
+    const importedAt = new Date().toISOString()
+    const leads: Lead[] = []
+    const contacts: Contact[] = []
+    const errors: string[] = []
+
+    rows.forEach(([organizationName, websiteValue, emailValue, sourceValue, reasonValue], index) => {
+      const website = normalizeUrl(websiteValue || '')
+      const sourceUrl = normalizeUrl(sourceValue || '')
+      const email = (emailValue || '').toLowerCase()
+      const websiteDomain = registeredDomain(safeHost(website))
+      const sourceDomain = registeredDomain(safeHost(sourceUrl))
+      const emailDomain = registeredDomain(email.split('@')[1] || '')
+      const rowNumber = index + 1
+
+      if (!organizationName || !isPublicUrl(website) || !isPublicUrl(sourceUrl) || !isValidEmail(email)) {
+        errors.push(`${rowNumber}行目: 会社名・公式URL・メール・出典URLを確認してください。`)
+        return
+      }
+      if (!emailDomain || websiteDomain !== emailDomain || sourceDomain !== emailDomain) {
+        errors.push(`${rowNumber}行目: 公式サイト・メール・出典の企業ドメインが一致しません。`)
+        return
+      }
+
+      const leadId = `verified-${email.replace(/[^a-z0-9]+/g, '-')}`
+      leads.push({
+        id: leadId,
+        organizationName,
+        organizationWebsite: website,
+        category: 'Official website verified',
+        country: targetMarket.trim() || 'Japan',
+        reasonForFit: reasonValue || '公式サイトで事業内容と一般・法人向け代表メールを確認しました。',
+        sourceUrl,
+        confidence: 0.95,
+        status: 'outreach_ready',
+      })
+      contacts.push({
+        id: `${leadId}-contact`,
+        leadId,
+        name: '',
+        title: 'ご担当者様',
+        email,
+        emailStatus: 'verified',
+        linkedinUrl: '',
+        sourceUrl,
+        confidence: 0.98,
+      })
+    })
+
+    if (errors.length) {
+      setError(errors.join(' / '))
+      return
+    }
+
+    const previousLeads = result?.leads || []
+    const previousContacts = result?.contacts || []
+    const importedEmails = new Set(contacts.map((contact) => contact.email.toLowerCase()))
+    const importedLeadIds = new Set(contacts.map((contact) => contact.leadId))
+    setResult({
+      id: result?.id || `verified-import-${Date.now()}`,
+      createdAt: result?.createdAt || importedAt,
+      input: result?.input || {
+        websiteUrl: normalizeUrl(siteUrl),
+        targetMarket: targetMarket.trim() || 'Japan',
+        goal: goal.trim(),
+        maxLeads: rows.length,
+      },
+      analysis: result?.analysis || {
+        product: analysis?.offering || '',
+        targetAudience: analysis?.idealCustomerProfile.join(' / ') || '',
+        positioning: analysis?.valueProp || '',
+        businessModel: '',
+        searchQueries: [],
+      },
+      leads: [
+        ...previousLeads.filter((lead) => !importedLeadIds.has(lead.id)),
+        ...leads,
+      ],
+      contacts: [
+        ...previousContacts.filter((contact) => !importedEmails.has(contact.email.toLowerCase())),
+        ...contacts,
+      ],
+      outreach: result?.outreach || [],
+      integrationStatus: result?.integrationStatus || {
+        firecrawl: 'manual_verified_import',
+        brave: 'manual_verified_import',
+        hunter: 'not_used',
+        apollo: 'not_used',
+        llm: 'not_used',
+      },
+      warnings: result?.warnings || [],
+    })
+    setExcludedIds((ids) => ids.filter((id) => !importedLeadIds.has(id)))
+    setDrafts((current) => Object.fromEntries(Object.entries(current).filter(([leadId]) => !importedLeadIds.has(leadId))))
+    setVerifiedLeadImport('')
+    setError('')
+    setNotice(`${leads.length}社を公式サイト確認済みの営業先として追加しました。`)
   }
 
   async function createDraft(item: LeadView) {
@@ -744,6 +854,29 @@ export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnable
                     </PrimaryButton>
                   </div>
                 </div>
+
+                <details className="mt-4 rounded-lg border border-[#d9dbd5] bg-[#fbfbf9]">
+                  <summary className="cursor-pointer px-5 py-4 text-sm font-black text-[#2b4c7e]">
+                    公式サイトで確認済みの営業先を一括追加
+                  </summary>
+                  <div className="border-t border-[#d9dbd5] p-5">
+                    <p className="text-xs font-semibold leading-6 text-[#6b7076]">
+                      1行につき「会社名、公式URL、代表メール、メール掲載元URL、提案理由」をタブ区切りで入力します。3つの企業ドメインが一致する場合だけ追加できます。
+                    </p>
+                    <textarea
+                      aria-label="確認済み営業先の一括入力"
+                      value={verifiedLeadImport}
+                      onChange={(event) => setVerifiedLeadImport(event.target.value)}
+                      placeholder={'株式会社○○\thttps://example.co.jp\tinfo@example.co.jp\thttps://example.co.jp/company\t屋外広告事業を展開'}
+                      className="field-input mt-3 min-h-36 resize-y font-mono text-xs leading-6"
+                    />
+                    <div className="mt-3 flex justify-end">
+                      <SecondaryButton onClick={importVerifiedLeads} disabled={!verifiedLeadImport.trim()}>
+                        <ShieldCheck size={16} /> ドメイン一致を確認して追加
+                      </SecondaryButton>
+                    </div>
+                  </div>
+                </details>
 
                 {result && (
                   <div className="mt-8">
@@ -1347,13 +1480,32 @@ function validateContact(contact: Contact | null, lead: Lead, targetMarket: stri
   if (!isUsableSource(contact.sourceUrl)) return { ok: false, flags: ['公開出典なし'] }
   if (isObviousMarketMismatch(lead, targetMarket)) return { ok: false, flags: ['対象市場外の可能性'] }
 
-  const flags = [contact.emailStatus === 'verified' ? '検証済み' : '公開ページで発見']
   const siteDomain = registeredDomain(safeHost(lead.organizationWebsite))
   const emailDomain = registeredDomain(domain)
-  if (siteDomain && emailDomain && siteDomain === emailDomain) flags.push('企業ドメイン一致')
-  else flags.push('ドメイン要確認')
-  if (['info', 'contact', 'sales', 'hello', 'support', 'inquiry'].includes(local)) flags.push('代表窓口')
+  const sourceDomain = registeredDomain(safeHost(contact.sourceUrl))
+  if (!siteDomain || !emailDomain || !sourceDomain || siteDomain !== emailDomain || sourceDomain !== emailDomain) {
+    return { ok: false, flags: ['企業ドメイン不一致'] }
+  }
+  if (['support', 'privacy', 'recruit', 'recruiting', 'jobs', 'career'].includes(local)) {
+    return { ok: false, flags: ['営業窓口ではないため除外'] }
+  }
+
+  const flags = [contact.emailStatus === 'verified' ? '検証済み' : '公開ページで発見', '企業ドメイン一致']
+  if (['info', 'contact', 'sales', 'hello', 'inquiry'].includes(local)) flags.push('代表窓口')
   return { ok: true, flags }
+}
+
+function isValidEmail(value: string) {
+  return /^[a-z0-9][a-z0-9._%+-]*@[a-z0-9.-]+\.[a-z]{2,}$/.test(value)
+}
+
+function isPublicUrl(value: string) {
+  try {
+    const url = new URL(value)
+    return ['http:', 'https:'].includes(url.protocol) && Boolean(url.hostname) && url.hostname !== 'localhost'
+  } catch {
+    return false
+  }
 }
 
 function contactScore(contact: Contact) {
