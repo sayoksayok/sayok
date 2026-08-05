@@ -5,6 +5,7 @@ import type {
   Lead,
   LeadDiscoveryInput,
   LeadDiscoveryResult,
+  LeadRelationshipType,
   LeadStatus,
   OutreachMessage,
   WebsiteAnalysis,
@@ -213,9 +214,9 @@ export async function POST(request: NextRequest) {
     const searchQueries = expandSearchQueries(input, analysis.searchQueries, campaign)
     const braveResults = await searchBrave(searchQueries, input.maxLeads ?? 14, input.targetMarket, keys, campaign)
     const leads = await scoreLeads(input, analysis, braveResults, keys, campaign)
-    const { contacts, warnings: hunterWarnings } = await discoverContacts(leads, keys)
+    const { contacts, warnings: hunterWarnings } = await discoverContacts(leads, keys, campaign)
     const { contacts: apolloContacts, warning: apolloWarning } = await discoverApolloContacts(leads, keys)
-    const mergedContacts = prioritizeContacts(mergeContacts([...contacts, ...apolloContacts]))
+    const mergedContacts = prioritizeContacts(mergeContacts([...contacts, ...apolloContacts]), campaign)
     const leadsWithStatus = applyLeadStatuses(leads, mergedContacts)
     const outreach = await generateOutreach(input, analysis, website, leadsWithStatus, mergedContacts, keys)
     const finalLeads = prioritizeActionableLeads(leadsWithStatus.map((lead) => {
@@ -251,6 +252,7 @@ export async function POST(request: NextRequest) {
         ...(apolloWarning ? [apolloWarning] : []),
         ...campaignWarnings(campaign, finalLeads.length, input.maxLeads ?? 14),
       ],
+      campaignId: campaign.id,
     }
 
     return NextResponse.json(result)
@@ -826,7 +828,33 @@ function searchResultScore(result: BraveResult, campaign: LeadCampaign = DEFAULT
 
 function isCampaignResultEligible(result: BraveResult, campaign: LeadCampaign) {
   if (campaign.id === 'default') return true
-  return dogeDayCandidateScore(result, campaign) >= 4
+  return dogeDayRelationshipType(result, campaign) !== 'reject' && dogeDayCandidateScore(result, campaign) >= 4
+}
+
+function dogeDayRelationshipType(
+  result: BraveResult,
+  campaign: LeadCampaign = DOGEDAY_CAMPAIGN,
+): LeadRelationshipType | 'reject' {
+  const domain = canonicalOrganizationDomain(result.url || '')
+  const text = `${result.title || ''} ${result.description || ''} ${domain}`.toLowerCase()
+  if (campaign.excludedDomains.some((excluded) => domain === excluded || domain.endsWith(`.${excluded}`))) return 'reject'
+  if (campaign.excludedTerms.some((term) => text.includes(term))) return 'reject'
+  if (/sports business journal|sports betting|gambling|casino|igaming|bookmaker|cybersecurity|email security|consulting firm|marketing agency/.test(text)) return 'reject'
+
+  const isPrimaryCryptoMedia = /crypto (?:news|media)|web3 (?:news|media)|blockchain (?:news|media)|digital asset (?:news|media)|decrypt\.co|coindesk|cointelegraph|blockworks/.test(text)
+  const isMedia = /\bmedia\b|news(?:room)?|journal(?:ism)?|editorial|publisher|magazine|press outlet|reporter/.test(text)
+  if (isPrimaryCryptoMedia) return 'media_partner'
+  if (isMedia) return 'reject'
+
+  if (/activation|experiential|merchandise|collectible|gaming|entertainment|creator platform/.test(text)) {
+    return 'activation_partner'
+  }
+
+  if (/\bcrypto|web3|blockchain|bitcoin|wallet|exchange|payments?|fintech|loyalty|rewards|consumer brand|streaming|platform/.test(text)) {
+    return 'cash_sponsor'
+  }
+
+  return 'reject'
 }
 
 function dogeDayCandidateScore(result: BraveResult, campaign: LeadCampaign = DOGEDAY_CAMPAIGN) {
@@ -890,7 +918,11 @@ Candidates:
 ${JSON.stringify(candidates, null, 2)}
 
 Use only the provided candidates. Do not create new organizations. Never add a candidate just to reach a requested count. Return fewer candidates when the evidence or commercial fit is weak. The target market is a hard location filter: do not label a company as being in the target country merely because the query mentioned that country. Exclude foreign-country domains and candidates without location evidence. Exclude the user's past/existing clients, encyclopedias, search portals, social networks, job boards, generic directories, email-security or redirect domains, and pages with no practical outreach value.
-${campaign.id === 'dogeday_2026_sponsorship' ? 'For every accepted candidate, explain why that organization could rationally pay for or activate a DOGE DAY sponsorship. Reject generic enterprise vendors and any candidate whose only connection is a keyword in the search query. Return each company/domain once. Use confidence below 0.65 for any uncertain candidate so it will be removed.' : ''}
+${campaign.id === 'dogeday_2026_sponsorship' ? `For every accepted candidate, classify the actual commercial role:
+- cash_sponsor: an operating brand or platform with a credible audience, community, or market reason to buy sponsorship.
+- activation_partner: a company with a concrete product, content, merchandise, gaming, entertainment, or experiential collaboration fit.
+- media_partner: only a crypto/Web3-native publication suitable for coverage or content collaboration. This is not a cash sponsor.
+Reject general publishers, sports-business media, betting/gambling media, agencies, consultants, security vendors, and organizations that merely discuss sponsorships. Never use an editor or journalist as a sponsorship decision maker. Reject any candidate whose only connection is a keyword in the search query. Return each company/domain once. Use confidence below 0.65 for any uncertain candidate so it will be removed.` : ''}
 
 Return JSON:
 {
@@ -902,7 +934,8 @@ Return JSON:
       "category": "company/community/distributor/association/event/media/agency/school/partner",
       "country": "target country or inferred country",
       "reasonForFit": "specific practical reason",
-      "confidence": 0.1
+      "confidence": 0.1,
+      "relationshipType": "cash_sponsor | activation_partner | media_partner"
     }
   ]
 }`
@@ -924,6 +957,9 @@ Return JSON:
         ? byId.get(String(lead.id))
         : byId.get(String(lead.id)) || candidates[index]
       if (!candidate) return null
+      const relationshipType = campaign.id === 'dogeday_2026_sponsorship'
+        ? normalizeDogeDayRelationshipType(lead.relationshipType, candidate)
+        : undefined
       return {
         id: String(lead.id || candidate.id),
         organizationName: String(lead.organizationName || candidate.title),
@@ -934,14 +970,18 @@ Return JSON:
         )),
         category: String(lead.category || 'organization'),
         country: String(lead.country || input.targetMarket),
-        reasonForFit: String(lead.reasonForFit || candidate.description || 'Matched by real search result.'),
+        reasonForFit: campaign.id === 'dogeday_2026_sponsorship'
+          ? dogeDayReason(candidate, relationshipType)
+          : String(lead.reasonForFit || candidate.description || 'Matched by real search result.'),
         sourceUrl: String(candidate.url || ''),
         confidence: clampConfidence(Number(lead.confidence || 0.5)),
         status: 'found' as LeadStatus,
+        relationshipType,
       }
     })
     .filter((lead): lead is Lead => Boolean(lead))
     .filter((lead) => lead.confidence >= campaign.minConfidence && !isBlockedDomain(extractDomain(lead.organizationWebsite)))
+    .filter((lead) => campaign.id !== 'dogeday_2026_sponsorship' || Boolean(lead.relationshipType))
     .filter((lead) => !isBlockedResult({ title: lead.organizationName, description: lead.reasonForFit, url: lead.organizationWebsite }))
     .filter((lead) => !matchesExcludedLead(lead, excludedTerms))
     .filter((lead) => isCampaignResultEligible({ title: lead.organizationName, description: lead.reasonForFit, url: lead.sourceUrl || lead.organizationWebsite }, campaign))
@@ -1023,19 +1063,49 @@ function resultToLead(
   const organizationName = cleanTitle(result.title || extractDomain(result.url || '') || `Lead ${index + 1}`)
   const domain = canonicalOrganizationDomain(result.url || '')
   const campaignScore = searchResultScore(result, campaign)
+  const relationshipType = campaign.id === 'dogeday_2026_sponsorship'
+    ? dogeDayRelationshipType(result, campaign)
+    : undefined
   return {
     id: `lead_${index + 1}`,
     organizationName,
     organizationWebsite: normalizeHomepage(result.url || ''),
-    category: inferLeadCategory(`${result.title || ''} ${result.description || ''} ${result.url || ''}`),
+    category: relationshipType && relationshipType !== 'reject'
+      ? relationshipType
+      : inferLeadCategory(`${result.title || ''} ${result.description || ''} ${result.url || ''}`),
     country: input.targetMarket,
-    reasonForFit: result.description || `${input.targetMarket}の営業候補として、${domain || organizationName}の公式サイトを公開検索で確認しました。`,
+    reasonForFit: campaign.id === 'dogeday_2026_sponsorship'
+      ? dogeDayReason(result, relationshipType === 'reject' ? undefined : relationshipType)
+      : result.description || `${input.targetMarket}の営業候補として、${domain || organizationName}の公式サイトを公開検索で確認しました。`,
     sourceUrl: result.url || '',
     confidence: campaign.id === 'dogeday_2026_sponsorship'
       ? clampConfidence(0.58 + Math.min(Math.max(campaignScore - 4, 0), 6) * 0.04)
       : 0.5,
     status: 'found',
+    relationshipType: relationshipType === 'reject' ? undefined : relationshipType,
   }
+}
+
+function normalizeDogeDayRelationshipType(value: unknown, candidate: BraveResult) {
+  const supplied = String(value || '').trim().toLowerCase()
+  if (['cash_sponsor', 'activation_partner', 'media_partner'].includes(supplied)) {
+    const deterministic = dogeDayRelationshipType(candidate)
+    return deterministic === 'reject' ? undefined : deterministic
+  }
+  const inferred = dogeDayRelationshipType(candidate)
+  return inferred === 'reject' ? undefined : inferred
+}
+
+function dogeDayReason(result: BraveResult, relationshipType?: LeadRelationshipType) {
+  const description = (result.description || '').replace(/\s+/g, ' ').trim()
+  const evidence = description || `${canonicalOrganizationDomain(result.url || '')} の公開ページを確認しました。`
+  if (relationshipType === 'media_partner') {
+    return `メディア提携候補（現金スポンサー候補ではありません）。公開ページでは ${evidence}`
+  }
+  if (relationshipType === 'activation_partner') {
+    return `企画・アクティベーション協力候補。公開ページでは ${evidence}`
+  }
+  return `現金スポンサー候補。公開ページでは ${evidence}`
 }
 
 function dedupeLeadsByOrganization(leads: Lead[]) {
@@ -1061,8 +1131,8 @@ function inferLeadCategory(value: string) {
   return 'organization'
 }
 
-async function discoverContacts(leads: Lead[], keys: RuntimeKeys) {
-  if (!keys.hunterApiKey) return discoverPublicContacts(leads)
+async function discoverContacts(leads: Lead[], keys: RuntimeKeys, campaign: LeadCampaign = DEFAULT_CAMPAIGN) {
+  if (!keys.hunterApiKey) return discoverPublicContacts(leads, campaign)
 
   const contacts: Contact[] = []
   const warnings: string[] = []
@@ -1087,7 +1157,7 @@ async function discoverContacts(leads: Lead[], keys: RuntimeKeys) {
 
     for (const email of emails) {
       const verified = await verifyHunterEmail(email.value || '', keys)
-      contacts.push({
+      const contact: Contact = {
         id: crypto.randomUUID(),
         leadId: lead.id,
         name: [email.first_name, email.last_name].filter(Boolean).join(' ') || 'Unknown contact',
@@ -1097,14 +1167,15 @@ async function discoverContacts(leads: Lead[], keys: RuntimeKeys) {
         linkedinUrl: email.linkedin || '',
         sourceUrl: email.sources?.[0]?.uri || `https://hunter.io/search/${domain}`,
         confidence: clampConfidence((verified.score || email.confidence || 50) / 100),
-      })
+      }
+      if (isCampaignContactEligible(contact, campaign)) contacts.push(contact)
     }
   }
 
   return { contacts, warnings }
 }
 
-async function discoverPublicContacts(leads: Lead[]) {
+async function discoverPublicContacts(leads: Lead[], campaign: LeadCampaign = DEFAULT_CAMPAIGN) {
   const contacts: Contact[] = []
   const warnings: string[] = []
 
@@ -1134,7 +1205,7 @@ async function discoverPublicContacts(leads: Lead[]) {
 
     for (const [email, meta] of found) {
       const verified = await hasMxRecord(email)
-      contacts.push({
+      const contact: Contact = {
         id: crypto.randomUUID(),
         leadId: lead.id,
         name: 'Public contact',
@@ -1144,7 +1215,8 @@ async function discoverPublicContacts(leads: Lead[]) {
         linkedinUrl: '',
         sourceUrl: meta.sourceUrl,
         confidence: verified ? 0.75 : 0.55,
-      })
+      }
+      if (isCampaignContactEligible(contact, campaign)) contacts.push(contact)
     }
   }
 
@@ -1232,6 +1304,16 @@ function inferContactTitle(email: string) {
   return 'Public contact'
 }
 
+function isCampaignContactEligible(contact: Contact, campaign: LeadCampaign) {
+  if (campaign.id !== 'dogeday_2026_sponsorship') return true
+  const local = contact.email.split('@')[0]?.toLowerCase() || ''
+  const title = contact.title.toLowerCase()
+  const text = `${local} ${title}`
+  if (/editor|editorial|journalist|reporter|newsroom|press|writer|author|customer support|security/.test(text)) return false
+  if (/partner|sponsor|brand|marketing|advertis|commercial|business development|bizdev|community|event|growth/.test(text)) return true
+  return /^(info|hello|contact|business|partnerships?|marketing|sponsorships?)$/.test(local)
+}
+
 async function verifyHunterEmail(email: string, keys: RuntimeKeys): Promise<{ status: Contact['emailStatus']; score: number }> {
   if (!email) return { status: 'not_found', score: 0 }
 
@@ -1315,7 +1397,7 @@ function mergeContacts(contacts: Contact[]) {
   return merged
 }
 
-function prioritizeContacts(contacts: Contact[]) {
+function prioritizeContacts(contacts: Contact[], campaign: LeadCampaign = DEFAULT_CAMPAIGN) {
   const byLead = new Map<string, Contact[]>()
   for (const contact of contacts) {
     byLead.set(contact.leadId, [...(byLead.get(contact.leadId) || []), contact])
@@ -1323,6 +1405,7 @@ function prioritizeContacts(contacts: Contact[]) {
 
   return [...byLead.values()].flatMap((leadContacts) => (
     leadContacts
+      .filter((contact) => isCampaignContactEligible(contact, campaign))
       .sort((a, b) => contactScore(b) - contactScore(a))
       .slice(0, 2)
   ))
@@ -1382,14 +1465,35 @@ function prioritizeActionableLeads(
       url: lead.sourceUrl || lead.organizationWebsite,
     }, campaign)))
 
-  return usable
+  const sorted = usable
     .sort((a, b) => {
+      const relationshipDelta = dogeDayRelationshipRank(b.relationshipType) - dogeDayRelationshipRank(a.relationshipType)
+      if (relationshipDelta !== 0) return relationshipDelta
       const aHasContact = contactLeadIds.has(a.id) ? 1 : 0
       const bHasContact = contactLeadIds.has(b.id) ? 1 : 0
       if (aHasContact !== bHasContact) return bHasContact - aHasContact
       return b.confidence - a.confidence
     })
+
+  if (campaign.id !== 'dogeday_2026_sponsorship') {
+    return sorted.slice(0, Math.min(input.maxLeads ?? 12, 14))
+  }
+
+  let mediaPartners = 0
+  return sorted
+    .filter((lead) => {
+      if (lead.relationshipType !== 'media_partner') return true
+      mediaPartners += 1
+      return mediaPartners <= 1
+    })
     .slice(0, Math.min(input.maxLeads ?? 12, 14))
+}
+
+function dogeDayRelationshipRank(value?: LeadRelationshipType) {
+  if (value === 'cash_sponsor') return 3
+  if (value === 'activation_partner') return 2
+  if (value === 'media_partner') return 1
+  return 0
 }
 
 async function generateOutreach(

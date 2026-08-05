@@ -81,7 +81,7 @@ const LEGACY_PROFILE_KEY = 'sayok:sales-profile:v2'
 const PROFILE_KEY = 'sayok:sales-profile:v3'
 const BULK_CONFIRM_ID = '__bulk_send__'
 const BULK_TEMPLATE_VERSION = 4
-const LEAD_QUALITY_VERSION = 2
+const LEAD_QUALITY_VERSION = 3
 const SALES_DECK_DRIVE_URL = 'https://drive.google.com/file/d/1p5NZiJnWU2CrnBmn2tb82iZbre7W0x9G/view?usp=sharing'
 const DOGEDAY_DECK_DRIVE_URL = 'https://drive.google.com/file/d/1_wuTyBDHFicPemao96BZ6k0w14mXD2IN/view?usp=sharing'
 
@@ -1541,9 +1541,15 @@ function LeadRow({ item, sentRecord, onExclude }: { item: LeadView; sentRecord?:
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <h3 className="text-lg font-black">{cleanOrganizationName(item.lead)}</h3>
-          <span className="rounded-full bg-[#eef2f7] px-2 py-1 text-xs font-bold text-[#2b4c7e]">
-            {Math.round(item.lead.confidence * 100)}% fit
-          </span>
+          {item.lead.relationshipType ? (
+            <span className={`rounded-full px-2 py-1 text-xs font-black ${relationshipBadgeStyle(item.lead.relationshipType)}`}>
+              {relationshipLabel(item.lead.relationshipType)}
+            </span>
+          ) : (
+            <span className="rounded-full bg-[#eef2f7] px-2 py-1 text-xs font-bold text-[#2b4c7e]">
+              {Math.round(item.lead.confidence * 100)}% fit
+            </span>
+          )}
           <span className={`rounded-full px-2 py-1 text-xs font-black ${sentRecord ? 'bg-emerald-100 text-emerald-900' : sendable ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800'}`}>
             {sentRecord ? '送信済み・再送対象外' : sendable ? 'メール確認済み' : '連絡先未確認'}
           </span>
@@ -1771,6 +1777,22 @@ function formatReasonForFit(lead: Lead) {
     return `${lead.country}の営業候補として、${host || cleanOrganizationName(lead)}の公式サイトと公開連絡先を確認しました。`
   }
   return reason
+}
+
+function relationshipLabel(value: NonNullable<Lead['relationshipType']>) {
+  return {
+    cash_sponsor: '現金スポンサー候補',
+    activation_partner: '企画協力候補',
+    media_partner: 'メディア提携候補',
+  }[value]
+}
+
+function relationshipBadgeStyle(value: NonNullable<Lead['relationshipType']>) {
+  return {
+    cash_sponsor: 'bg-emerald-50 text-emerald-800',
+    activation_partner: 'bg-blue-50 text-blue-800',
+    media_partner: 'bg-violet-50 text-violet-800',
+  }[value]
 }
 
 function displayHost(value: string) {

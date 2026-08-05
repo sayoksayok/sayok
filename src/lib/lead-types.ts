@@ -1,5 +1,7 @@
 export type LeadStatus = 'found' | 'contact_found' | 'email_found' | 'outreach_ready' | 'sent'
 
+export type LeadRelationshipType = 'cash_sponsor' | 'activation_partner' | 'media_partner'
+
 export type ContactEmailStatus = 'found' | 'verified' | 'guessed' | 'not_found'
 
 export type LeadDiscoveryInput = {
@@ -39,6 +41,7 @@ export type Lead = {
   sourceUrl: string
   confidence: number
   status: LeadStatus
+  relationshipType?: LeadRelationshipType
 }
 
 export type Contact = {
@@ -79,6 +82,7 @@ export type LeadDiscoveryResult = {
     llm: string
   }
   warnings: string[]
+  campaignId?: string
 }
 
 export type ApiSetupError = {
