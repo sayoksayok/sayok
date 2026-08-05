@@ -38,12 +38,16 @@ async function signIn(email) {
 }
 
 async function main() {
-  const userA = await createConfirmedUser(emailA);
-  const userB = await createConfirmedUser(emailB);
+  let userA;
+  let userB;
+  let workspaceId;
+  try {
+  userA = await createConfirmedUser(emailA);
+  userB = await createConfirmedUser(emailB);
   const clientA = await signIn(emailA);
   const clientB = await signIn(emailB);
 
-  const workspaceId = crypto.randomUUID();
+  workspaceId = crypto.randomUUID();
   const { error: workspaceError } = await clientA.from('work_os_workspaces').insert({
     id: workspaceId,
     owner_id: userA.id,
@@ -69,6 +73,19 @@ async function main() {
   });
   if (taskError) throw taskError;
 
+  const { error: historyError } = await clientA.from('work_os_activity_events').insert({
+    workspace_id: workspaceId,
+    actor_type: 'integration',
+    event_type: 'sales_email_sent',
+    summary: 'Private tenant A sales email',
+    payload: {
+      organization: 'Tenant A customer',
+      to_email: 'private-recipient@example.com',
+      subject: 'Private subject',
+    },
+  });
+  if (historyError) throw historyError;
+
   const { data: ownRows, error: ownReadError } = await clientA.from('work_os_tasks').select('id,title').eq('workspace_id', workspaceId);
   if (ownReadError) throw ownReadError;
   if (!ownRows?.length) throw new Error('User A cannot read own workspace task');
@@ -76,6 +93,22 @@ async function main() {
   const { data: leakedRows, error: leakReadError } = await clientB.from('work_os_tasks').select('id,title').eq('workspace_id', workspaceId);
   if (leakReadError) throw leakReadError;
   if (leakedRows?.length) throw new Error('Tenant isolation failed: User B can read Workspace A data');
+
+  const { data: ownHistory, error: ownHistoryError } = await clientA
+    .from('work_os_activity_events')
+    .select('id,payload')
+    .eq('workspace_id', workspaceId)
+    .eq('event_type', 'sales_email_sent');
+  if (ownHistoryError) throw ownHistoryError;
+  if (!ownHistory?.length) throw new Error('User A cannot read own sales history');
+
+  const { data: leakedHistory, error: leakedHistoryError } = await clientB
+    .from('work_os_activity_events')
+    .select('id,payload')
+    .eq('workspace_id', workspaceId)
+    .eq('event_type', 'sales_email_sent');
+  if (leakedHistoryError) throw leakedHistoryError;
+  if (leakedHistory?.length) throw new Error('Tenant isolation failed: User B can read Workspace A sales history');
 
   const { error: crossWriteError } = await clientB.from('work_os_tasks').insert({
     workspace_id: workspaceId,
@@ -87,11 +120,21 @@ async function main() {
   });
   if (!crossWriteError) throw new Error('Tenant isolation failed: User B can write into Workspace A');
 
-  await admin.from('work_os_workspaces').delete().eq('id', workspaceId);
-  await admin.auth.admin.deleteUser(userA.id);
-  await admin.auth.admin.deleteUser(userB.id);
+  const { error: crossHistoryWriteError } = await clientB.from('work_os_activity_events').insert({
+    workspace_id: workspaceId,
+    actor_type: 'user',
+    event_type: 'sales_email_sent',
+    summary: 'Cross tenant history write attempt',
+    payload: { to_email: 'forbidden@example.com' },
+  });
+  if (!crossHistoryWriteError) throw new Error('Tenant isolation failed: User B can write Workspace A sales history');
 
   console.log('Tenant isolation passed');
+  } finally {
+    if (workspaceId) await admin.from('work_os_workspaces').delete().eq('id', workspaceId);
+    if (userA) await admin.auth.admin.deleteUser(userA.id);
+    if (userB) await admin.auth.admin.deleteUser(userB.id);
+  }
 }
 
 main().catch((error) => {

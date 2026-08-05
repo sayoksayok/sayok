@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { requireSalesAgentUser, salesAgentAllowedEmail } from '@/lib/sales-agent-auth'
+import { requireSalesAgentUser } from '@/lib/sales-agent-auth'
 import { encryptToken } from '@/lib/work-os-server'
 
 const gmailSendScope = 'https://www.googleapis.com/auth/gmail.send'
@@ -40,9 +40,9 @@ export async function POST(request: NextRequest) {
         { status: 401 },
       )
     }
-    if (googleEmail !== salesAgentAllowedEmail || googleEmail !== context.user.email?.toLowerCase()) {
+    if (googleEmail !== context.user.email?.toLowerCase()) {
       return NextResponse.json(
-        { error: `${salesAgentAllowedEmail} のGmailだけ接続できます。` },
+        { error: 'ログイン中のGoogleアカウントと同じGmailだけ接続できます。' },
         { status: 403 },
       )
     }

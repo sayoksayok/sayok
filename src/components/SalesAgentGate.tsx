@@ -3,7 +3,7 @@
 import type { Session, User } from '@supabase/supabase-js'
 import { LockKeyhole, Mail, ShieldCheck } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
-import SalesAgent from '@/components/SalesAgent'
+import SalesAgent, { type SenderProfile } from '@/components/SalesAgent'
 import { checkAuthHealth, getAuthCallbackUrl, supabase } from '@/lib/supabase'
 
 type GmailStatus = {
@@ -13,14 +13,12 @@ type GmailStatus = {
   needsReauth?: boolean
 }
 
-const allowedEmail = (process.env.NEXT_PUBLIC_SALES_AGENT_ALLOWED_EMAIL || 'yudai@looq.icu').toLowerCase()
 const googleLoginEnabled = process.env.NEXT_PUBLIC_GOOGLE_AUTH_ENABLED === 'true'
 
 export default function SalesAgentGate() {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(Boolean(supabase))
   const [busy, setBusy] = useState(false)
-  const [emailSent, setEmailSent] = useState(false)
   const [error, setError] = useState('')
   const [gmailStatus, setGmailStatus] = useState<GmailStatus>({
     connected: false,
@@ -82,7 +80,7 @@ export default function SalesAgentGate() {
       const nextUser = data.session?.user || null
       setUser(nextUser)
       setLoading(false)
-      if (data.session && nextUser?.email?.toLowerCase() === allowedEmail) {
+      if (data.session && nextUser?.email) {
         void persistGoogleConnection(data.session)
       }
     }).catch(() => {
@@ -93,7 +91,7 @@ export default function SalesAgentGate() {
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user || null)
       setLoading(false)
-      if (session?.user.email?.toLowerCase() === allowedEmail) {
+      if (session?.user.email) {
         window.setTimeout(() => void persistGoogleConnection(session), 0)
       }
     })
@@ -133,7 +131,6 @@ export default function SalesAgentGate() {
         queryParams: {
           access_type: 'offline',
           prompt: 'consent',
-          login_hint: allowedEmail,
         },
       },
     })
@@ -142,34 +139,6 @@ export default function SalesAgentGate() {
       setBusy(false)
       setError(`Googleログインを開始できませんでした: ${signInError.message}`)
     }
-  }
-
-  async function signInWithEmail() {
-    if (!supabase) return
-    setBusy(true)
-    setEmailSent(false)
-    setError('')
-
-    const healthy = await checkAuthHealth()
-    if (!healthy) {
-      setBusy(false)
-      setError('現在ログインサーバーへ接続できません。設定を確認してください。')
-      return
-    }
-
-    const { error: signInError } = await supabase.auth.signInWithOtp({
-      email: allowedEmail,
-      options: {
-        emailRedirectTo: getAuthCallbackUrl('/'),
-        shouldCreateUser: true,
-      },
-    })
-    setBusy(false)
-    if (signInError) {
-      setError(`ログインメールを送れませんでした: ${signInError.message}`)
-      return
-    }
-    setEmailSent(true)
   }
 
   async function signOut() {
@@ -188,24 +157,6 @@ export default function SalesAgentGate() {
   }
 
   const email = user?.email?.toLowerCase() || ''
-  if (user && email !== allowedEmail) {
-    return (
-      <main className="min-h-screen bg-[#f2f3f0] px-4 py-12 text-[#20242b]">
-        <section className="mx-auto max-w-lg rounded-xl border border-red-200 bg-white p-8 shadow-sm">
-          <ShieldCheck className="h-9 w-9 text-[#bc3f34]" />
-          <p className="mt-5 text-xs font-black tracking-[0.16em] text-[#bc3f34]">ACCESS DENIED</p>
-          <h1 className="mt-2 text-3xl font-black">この営業画面はYudai専用です。</h1>
-          <p className="mt-4 text-sm font-semibold leading-7 text-[#5f656c]">
-            {email} ではアクセスできません。{allowedEmail} でログインしてください。
-          </p>
-          <button type="button" onClick={signOut} className="mt-6 w-full rounded-md bg-[#2b4c7e] px-5 py-3 text-sm font-black text-white">
-            ログアウトしてやり直す
-          </button>
-        </section>
-      </main>
-    )
-  }
-
   if (!user) {
     return (
       <main className="min-h-screen bg-[#f2f3f0] px-4 py-12 text-[#20242b]">
@@ -216,11 +167,11 @@ export default function SalesAgentGate() {
           <p className="mt-6 text-xs font-black tracking-[0.16em] text-[#bc3f34]">SAYOK PRIVATE SALES</p>
           <h1 className="mt-3 text-4xl font-black leading-tight">ログインした本人だけが見られる営業画面。</h1>
           <p className="mt-4 text-sm font-semibold leading-7 text-[#5f656c]">
-            営業先、公開連絡先、作成済みメール、送信操作はログイン後にだけ表示されます。
+            営業先、作成済みメール、送信履歴、Gmail接続はGoogleアカウントごとに分離されます。
           </p>
           <div className="mt-6 rounded-lg border border-[#d9dbd5] bg-white p-4 text-sm font-bold">
-            <div className="flex items-center gap-2"><Mail size={17} className="text-[#2b4c7e]" /> 送信元: {allowedEmail}</div>
-            <div className="mt-2 flex items-center gap-2"><ShieldCheck size={17} className="text-emerald-700" /> 承認後のみGmail送信</div>
+            <div className="flex items-center gap-2"><Mail size={17} className="text-[#2b4c7e]" /> ログイン本人のGmailから送信</div>
+            <div className="mt-2 flex items-center gap-2"><ShieldCheck size={17} className="text-emerald-700" /> 他のユーザーの履歴は表示しません</div>
           </div>
           {googleLoginEnabled ? (
             <button
@@ -229,24 +180,11 @@ export default function SalesAgentGate() {
               disabled={busy}
               className="mt-6 w-full rounded-md bg-[#2b4c7e] px-5 py-4 text-sm font-black text-white hover:bg-[#1e3a63] disabled:opacity-50"
             >
-              {busy ? '接続を確認しています…' : `${allowedEmail} でGoogleログイン`}
+              {busy ? '接続を確認しています…' : 'Googleでログインして始める'}
             </button>
           ) : (
             <p className="mt-6 rounded-md bg-amber-50 px-4 py-3 text-sm font-bold leading-6 text-amber-900">
-              Googleログインは設定中です。現在は下のメールログインを利用できます。
-            </p>
-          )}
-          <button
-            type="button"
-            onClick={signInWithEmail}
-            disabled={busy}
-            className="mt-3 w-full rounded-md border border-[#2b4c7e] bg-white px-5 py-3 text-sm font-black text-[#2b4c7e] hover:bg-[#eef3f8] disabled:opacity-50"
-          >
-            メールのログインリンクを受け取る
-          </button>
-          {emailSent && (
-            <p className="mt-4 rounded-md bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-800">
-              {allowedEmail} にログインリンクを送りました。メール内のリンクを開いてください。
+              Googleログインは現在設定中です。
             </p>
           )}
           {error && <p className="mt-4 rounded-md bg-red-50 px-4 py-3 text-sm font-bold text-red-700">{error}</p>}
@@ -257,13 +195,21 @@ export default function SalesAgentGate() {
 
   return (
     <SalesAgent
+      userId={user.id}
       userEmail={email}
+      userName={String(user.user_metadata?.full_name || user.user_metadata?.name || '').trim()}
+      initialProfile={readInitialProfile(user.user_metadata?.sales_profile)}
       gmailConnected={gmailStatus.connected && gmailStatus.canSend}
       googleAuthEnabled={googleLoginEnabled}
       onReconnectGoogle={signInWithGoogle}
       onSignOut={signOut}
     />
   )
+}
+
+function readInitialProfile(value: unknown): Partial<SenderProfile> | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+  return value as Partial<SenderProfile>
 }
 
 function GateMessage({ title, body }: { title: string; body: string }) {

@@ -6,14 +6,12 @@ import Link from 'next/link';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 
-const salesAgentEmail = (process.env.NEXT_PUBLIC_SALES_AGENT_ALLOWED_EMAIL || 'yudai@looq.icu').toLowerCase();
-
 async function persistSalesGoogleConnection(
   session: Session,
   providerToken = session.provider_token,
   providerRefreshToken = session.provider_refresh_token,
 ) {
-  if (session.user.email?.toLowerCase() !== salesAgentEmail || !providerToken) return;
+  if (!session.user.email || !providerToken) return;
 
   const response = await fetch('/api/sales-agent/google/connect', {
     method: 'POST',

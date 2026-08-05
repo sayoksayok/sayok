@@ -14,6 +14,9 @@ type DraftInput = {
   offering?: string
   valueProp?: string
   serviceNote?: string
+  senderWebsite?: string
+  salesDeckUrl?: string
+  attachLooqDeck?: boolean
   tone?: string
   language?: 'English' | 'Japanese'
 }
@@ -22,8 +25,6 @@ type DraftResult = {
   subject: string
   body: string
 }
-
-const SALES_DECK_DRIVE_URL = 'https://drive.google.com/file/d/1p5NZiJnWU2CrnBmn2tb82iZbre7W0x9G/view?usp=sharing'
 
 export async function POST(request: NextRequest) {
   const auth = await requireSalesAgentUser(request)
@@ -34,8 +35,9 @@ export async function POST(request: NextRequest) {
     if (!input.company || !input.offering || !input.senderName || !input.senderCompany) {
       return NextResponse.json({ error: '会社名・商材・差出人情報が必要です。' }, { status: 400 })
     }
+    input.attachLooqDeck = input.attachLooqDeck === true && Boolean(auth.user.email?.toLowerCase().endsWith('@looq.icu'))
 
-    const fallback = withSalesCollateral(fallbackDraft(input), input.language || 'English')
+    const fallback = withSalesCollateral(fallbackDraft(input), input)
     const apiKey = process.env.ANTHROPIC_API_KEY
     if (!apiKey) return NextResponse.json({ draft: fallback, source: 'fallback' })
 
@@ -45,6 +47,9 @@ Sender: ${input.senderName} from ${input.senderCompany}
 What the sender sells: ${input.offering}
 Customer value: ${input.valueProp || 'unknown'}
 Additional offer details: ${input.serviceNote || 'none'}
+Sender website: ${input.senderWebsite || 'none'}
+Service deck URL: ${input.salesDeckUrl || 'none'}
+LOOQ PDF attachment enabled: ${input.attachLooqDeck === true ? 'yes' : 'no'}
 Recipient organization: ${input.company}
 Recipient website: ${input.website || 'unknown'}
 Best contact role: ${input.contactTitle || 'public business contact'}
@@ -59,9 +64,9 @@ Rules:
 - Explain one specific, plausible value for this organization.
 - Keep the body between 120 and 190 words in English, or 250 and 420 Japanese characters.
 - Ask for one low-friction next step.
-- Include the LOOQ Japan website https://www.looq.jp/ near the end.
-- Include the service deck Google Drive URL ${SALES_DECK_DRIVE_URL} near the end.
-- State that the service deck LOOQ_pitchdeck_JP.pdf is attached.
+- Include the sender website near the end only when one is provided.
+- Include the service deck URL near the end only when one is provided.
+- State that LOOQ_pitchdeck_JP.pdf is attached only when attachment is enabled.
 - Do not include a signature or legal footer.
 - Avoid hype, flattery, and generic sales language.
 - Return only JSON: {"subject":"...","body":"..."}`
@@ -84,7 +89,7 @@ Rules:
 
     const data = (await response.json()) as { content?: Array<{ type?: string; text?: string }> }
     const raw = data.content?.find((item) => item.type === 'text')?.text || ''
-    const draft = withSalesCollateral(parseDraft(raw), input.language || 'English')
+    const draft = withSalesCollateral(parseDraft(raw), input)
     if (!draft.body || !draft.subject) return NextResponse.json({ draft: fallback, source: 'fallback' })
     return NextResponse.json({ draft, source: 'anthropic' })
   } catch {
@@ -92,25 +97,38 @@ Rules:
   }
 }
 
-function withSalesCollateral(draft: DraftResult, language: 'English' | 'Japanese'): DraftResult {
+function withSalesCollateral(draft: DraftResult, input: DraftInput): DraftResult {
   if (!draft.body) return draft
+  const language = input.language || 'English'
+  const website = publicUrl(input.senderWebsite)
+  const deckUrl = publicUrl(input.salesDeckUrl)
   const websiteLine = language === 'Japanese'
-    ? 'LOOQ Japan ウェブサイト：\nhttps://www.looq.jp/'
-    : 'LOOQ Japan website:\nhttps://www.looq.jp/'
+    ? `${input.senderCompany} ウェブサイト：\n${website}`
+    : `${input.senderCompany} website:\n${website}`
   const attachmentLine = language === 'Japanese'
     ? 'サービス資料「LOOQ_pitchdeck_JP.pdf」も添付しておりますので、あわせてご覧ください。'
     : 'I have also attached our service deck, LOOQ_pitchdeck_JP.pdf, for reference.'
   const driveLine = language === 'Japanese'
-    ? `サービス資料（Google Drive）：\n${SALES_DECK_DRIVE_URL}`
-    : `Service deck (Google Drive):\n${SALES_DECK_DRIVE_URL}`
+    ? `サービス資料：\n${deckUrl}`
+    : `Service deck:\n${deckUrl}`
   const additions = [
-    draft.body.includes('https://www.looq.jp/') ? '' : websiteLine,
-    draft.body.includes(SALES_DECK_DRIVE_URL) ? '' : driveLine,
-    draft.body.includes('LOOQ_pitchdeck_JP.pdf') ? '' : attachmentLine,
+    website && !draft.body.includes(website) ? websiteLine : '',
+    deckUrl && !draft.body.includes(deckUrl) ? driveLine : '',
+    input.attachLooqDeck === true && !draft.body.includes('LOOQ_pitchdeck_JP.pdf') ? attachmentLine : '',
   ].filter(Boolean)
   return {
     ...draft,
     body: additions.length ? `${draft.body}\n\n${additions.join('\n\n')}` : draft.body,
+  }
+}
+
+function publicUrl(value?: string) {
+  if (!value) return ''
+  try {
+    const url = new URL(value)
+    return ['http:', 'https:'].includes(url.protocol) && url.hostname !== 'localhost' ? url.toString() : ''
+  } catch {
+    return ''
   }
 }
 

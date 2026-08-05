@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { requireSalesAgentUser, salesAgentAllowedEmail } from '@/lib/sales-agent-auth'
+import { requireSalesAgentUser } from '@/lib/sales-agent-auth'
 import {
   getValidSalesAgentAccessToken,
   sendSalesEmail,
@@ -17,6 +17,7 @@ type SendInput = {
   approvedBy?: string
   confirmed?: boolean
   confirmationText?: string
+  attachLooqDeck?: boolean
 }
 
 const dailySendLimit = Math.max(1, Math.min(100, Number(process.env.SALES_AGENT_DAILY_SEND_LIMIT || 20)))
@@ -26,7 +27,6 @@ const pitchDeck = {
   url: process.env.LOOQ_PITCH_DECK_URL || 'https://sayok-production.vercel.app/sales-assets/LOOQ_pitchdeck_JP.pdf',
 }
 const maxAttachmentBytes = 10 * 1024 * 1024
-const SALES_DECK_DRIVE_URL = 'https://drive.google.com/file/d/1p5NZiJnWU2CrnBmn2tb82iZbre7W0x9G/view?usp=sharing'
 
 export async function POST(request: NextRequest) {
   const context = await requireSalesAgentUser(request)
@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
 
   const to = input!.to!.trim().toLowerCase()
   const approvedBy = input!.approvedBy!.trim().toLowerCase()
-  if (approvedBy !== context.user.email?.toLowerCase() || approvedBy !== salesAgentAllowedEmail) {
+  if (approvedBy !== context.user.email?.toLowerCase()) {
     return NextResponse.json({ error: 'ログイン本人の承認を確認できません。' }, { status: 403 })
   }
 
@@ -63,6 +63,13 @@ export async function POST(request: NextRequest) {
   if (suppressionLookup.data) return NextResponse.json({ error: 'この宛先は配信停止リストに登録されています。' }, { status: 409 })
   if (duplicateLookup.data) return NextResponse.json({ error: 'この宛先には送信済みです。重複送信を停止しました。' }, { status: 409 })
   if (!connectionLookup.data) return NextResponse.json({ error: '送信前にGmailを接続してください。' }, { status: 409 })
+  const connection = connectionLookup.data as SalesAgentGoogleConnection
+  const googleEmail = connection.google_email?.trim().toLowerCase() || ''
+  if (!googleEmail || googleEmail !== context.user.email?.toLowerCase()) {
+    return NextResponse.json({ error: 'ログイン本人のGmail接続を確認できません。再接続してください。' }, { status: 403 })
+  }
+  const shouldAttachLooqDeck = input!.attachLooqDeck === true && googleEmail.endsWith('@looq.icu')
+  const attachmentNames = shouldAttachLooqDeck ? [pitchDeck.filename] : []
 
   const { data: audit, error: auditError } = await context.admin.from('work_os_activity_events').insert({
     workspace_id: context.workspaceId,
@@ -71,12 +78,12 @@ export async function POST(request: NextRequest) {
     summary: `${input!.organization!.trim()} への営業メールを承認`,
     payload: {
       approved_by: approvedBy,
-      google_email: salesAgentAllowedEmail,
+      google_email: googleEmail,
       organization: input!.organization!.trim(),
       to_email: to,
       subject: input!.subject!.trim(),
       source_url: input!.sourceUrl!.trim(),
-      attachments: [pitchDeck.filename],
+      attachments: attachmentNames,
     },
   }).select('id').single()
   if (auditError || !audit) {
@@ -86,15 +93,15 @@ export async function POST(request: NextRequest) {
   try {
     const accessToken = await getValidSalesAgentAccessToken(
       context.admin,
-      connectionLookup.data as SalesAgentGoogleConnection,
+      connection,
     )
-    const attachment = await loadPitchDeck()
-    const messageBody = prepareSalesEmailBody(input!.body!.trim())
+    const attachments = shouldAttachLooqDeck ? [await loadPitchDeck()] : []
+    const messageBody = input!.body!.trim()
     const sent = await sendSalesEmail(accessToken, {
       to,
       subject: input!.subject!.trim(),
       body: messageBody,
-      attachments: [attachment],
+      attachments,
     })
     const sentAt = new Date().toISOString()
     const { error: sentAuditError } = await context.admin.from('work_os_activity_events').insert({
@@ -105,12 +112,12 @@ export async function POST(request: NextRequest) {
       payload: {
         approval_event_id: audit.id,
         approved_by: approvedBy,
-        google_email: salesAgentAllowedEmail,
+        google_email: googleEmail,
         organization: input!.organization!.trim(),
         to_email: to,
         subject: input!.subject!.trim(),
         source_url: input!.sourceUrl!.trim(),
-        attachments: [pitchDeck.filename],
+        attachments: attachmentNames,
         gmail_message_id: sent.id,
         gmail_thread_id: sent.threadId,
         sent_at: sentAt,
@@ -122,9 +129,9 @@ export async function POST(request: NextRequest) {
       messageId: sent.id,
       threadId: sent.threadId,
       sentAt,
-      from: salesAgentAllowedEmail,
+      from: googleEmail,
       to,
-      attachments: [pitchDeck.filename],
+      attachments: attachmentNames,
       auditRecorded: !sentAuditError,
       auditWarning: sentAuditError ? '送信済みですが監査ログの保存に失敗しました。' : null,
     })
@@ -141,7 +148,7 @@ export async function POST(request: NextRequest) {
         to_email: to,
         subject: input!.subject!.trim(),
         source_url: input!.sourceUrl!.trim(),
-        attachments: [pitchDeck.filename],
+        attachments: attachmentNames,
         error: message,
       },
     })
@@ -160,36 +167,6 @@ async function loadPitchDeck() {
     throw new Error('LOOQサービス資料がPDFではありません。送信を停止しました。')
   }
   return { ...pitchDeck, content }
-}
-
-function prepareSalesEmailBody(value: string) {
-  const footerMarker = '\n\n――――'
-  const footerIndex = value.indexOf(footerMarker)
-  const footer = footerIndex >= 0 ? value.slice(footerIndex) : ''
-  const main = (footerIndex >= 0 ? value.slice(0, footerIndex) : value)
-    .trim()
-    .replace(/\n+\s*石田雄大\s*\n+\s*LOOQ Japan\s*$/u, '')
-    .trim()
-  const japanese = /[ぁ-んァ-ヶ一-龠々]/.test(main)
-  const additions = [
-    main.includes('https://www.looq.jp/')
-      ? ''
-      : japanese
-        ? 'LOOQ Japan ウェブサイト：\nhttps://www.looq.jp/'
-        : 'LOOQ Japan website:\nhttps://www.looq.jp/',
-    main.includes(SALES_DECK_DRIVE_URL)
-      ? ''
-      : japanese
-        ? `サービス資料（Google Drive）：\n${SALES_DECK_DRIVE_URL}`
-        : `Service deck (Google Drive):\n${SALES_DECK_DRIVE_URL}`,
-    main.includes(pitchDeck.filename)
-      ? ''
-      : japanese
-        ? `サービス資料「${pitchDeck.filename}」も添付しておりますので、あわせてご覧ください。`
-        : `I have also attached our service deck, ${pitchDeck.filename}, for reference.`,
-  ].filter(Boolean)
-  const normalizedMain = additions.length ? `${main}\n\n${additions.join('\n\n')}` : main
-  return `${normalizedMain}${footer}`
 }
 
 function validateSendInput(input: SendInput | null) {

@@ -29,11 +29,14 @@ type SiteAnalysis = {
   searchKeywords: string[]
 }
 
-type SenderProfile = {
+export type SenderProfile = {
   senderName: string
   senderCompany: string
   senderAddress: string
   senderContact: string
+  websiteUrl: string
+  salesDeckUrl: string
+  attachLooqDeck: boolean
   serviceNote: string
   tone: string
   language: 'English' | 'Japanese'
@@ -78,7 +81,7 @@ const BULK_CONFIRM_ID = '__bulk_send__'
 const BULK_TEMPLATE_VERSION = 3
 const SALES_DECK_DRIVE_URL = 'https://drive.google.com/file/d/1p5NZiJnWU2CrnBmn2tb82iZbre7W0x9G/view?usp=sharing'
 
-const defaultBulkTemplate: BulkTemplate = {
+const looqBulkTemplate: BulkTemplate = {
   subject: '{{会社名}}様｜屋外広告の効果測定について',
   body: `{{宛名}}
 
@@ -101,11 +104,27 @@ ${SALES_DECK_DRIVE_URL}
 同じ資料「LOOQ_pitchdeck_JP.pdf」も添付しております。`,
 }
 
-const defaultProfile: SenderProfile = {
-  senderName: '石田雄大',
-  senderCompany: 'LOOQ Japan',
-  senderAddress: '〒150-0002 東京都渋谷区渋谷2-19-19 ワコー宮益坂ビル5階',
-  senderContact: 'yudai@looq.icu',
+const genericBulkTemplate: BulkTemplate = {
+  subject: '{{会社名}}様｜お取り組みについてのご提案',
+  body: `{{宛名}}
+
+はじめてご連絡いたします。{{自社名}}の{{差出人名}}と申します。
+
+貴社の公式サイトを拝見し、ご連絡いたしました。
+
+弊社では、{{提案内容}}を提供しています。貴社のお取り組みにお役立ていただける可能性があると考えております。
+
+まずは15〜20分ほどお時間をいただき、現在のお悩みやお取り組みについてお聞かせいただけますでしょうか。`,
+}
+
+const emptyProfile: SenderProfile = {
+  senderName: '',
+  senderCompany: '',
+  senderAddress: '',
+  senderContact: '',
+  websiteUrl: '',
+  salesDeckUrl: '',
+  attachLooqDeck: false,
   serviceNote: '',
   tone: 'Professional, concise, and human',
   language: 'Japanese',
@@ -119,14 +138,21 @@ const steps = [
 ] as const
 
 type SalesAgentProps = {
+  userId: string
   userEmail: string
+  userName: string
+  initialProfile?: Partial<SenderProfile>
   gmailConnected: boolean
   googleAuthEnabled: boolean
   onReconnectGoogle: () => void
   onSignOut: () => void
 }
 
-export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnabled, onReconnectGoogle, onSignOut }: SalesAgentProps) {
+export default function SalesAgent({ userId, userEmail, userName, initialProfile, gmailConnected, googleAuthEnabled, onReconnectGoogle, onSignOut }: SalesAgentProps) {
+  const [defaultProfile] = useState(() => profileForUser(userEmail, userName, initialProfile))
+  const [defaultBulkTemplate] = useState(() => bulkTemplateForUser(userEmail))
+  const storageKey = `${STORAGE_KEY}:${userId}`
+  const profileKey = `${PROFILE_KEY}:${userId}`
   const [step, setStep] = useState(1)
   const [siteUrl, setSiteUrl] = useState('')
   const [analysis, setAnalysis] = useState<SiteAnalysis | null>(null)
@@ -152,17 +178,21 @@ export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnable
   const [historyError, setHistoryError] = useState('')
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0)
   const [verifiedLeadImport, setVerifiedLeadImport] = useState('')
+  const [profileSaveBusy, setProfileSaveBusy] = useState(false)
+  const [profileSaved, setProfileSaved] = useState(false)
 
   useEffect(() => {
     try {
-      const savedProfile = localStorage.getItem(PROFILE_KEY)
+      const legacyProfile = userEmail === 'yudai@looq.icu' ? localStorage.getItem(PROFILE_KEY) : null
+      const savedProfile = localStorage.getItem(profileKey) || legacyProfile
       if (savedProfile) setProfile({ ...defaultProfile, ...JSON.parse(savedProfile) })
     } catch {
-      localStorage.removeItem(PROFILE_KEY)
+      localStorage.removeItem(profileKey)
     }
 
     try {
-      const savedWorkspace = localStorage.getItem(STORAGE_KEY)
+      const legacyWorkspace = userEmail === 'yudai@looq.icu' ? localStorage.getItem(STORAGE_KEY) : null
+      const savedWorkspace = localStorage.getItem(storageKey) || legacyWorkspace
       if (savedWorkspace) {
         const saved = JSON.parse(savedWorkspace) as {
           step?: number
@@ -188,7 +218,7 @@ export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnable
         setResult(saved.result || null)
         setDrafts(Object.fromEntries(Object.entries(saved.drafts || {}).map(([leadId, draft]) => [
           leadId,
-          { ...draft, body: prepareSalesBody(draft.body) },
+          draft,
         ])))
         setBulkTemplate(saved.bulkTemplateVersion === BULK_TEMPLATE_VERSION
           ? { ...defaultBulkTemplate, ...saved.bulkTemplate }
@@ -196,20 +226,20 @@ export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnable
         setExcludedIds(saved.excludedIds || [])
       }
     } catch {
-      localStorage.removeItem(STORAGE_KEY)
+      localStorage.removeItem(storageKey)
     } finally {
       setHydrated(true)
     }
-  }, [])
+  }, [defaultBulkTemplate, defaultProfile, profileKey, storageKey, userEmail])
 
   useEffect(() => {
     if (!hydrated) return
-    localStorage.setItem(PROFILE_KEY, JSON.stringify(profile))
-  }, [hydrated, profile])
+    localStorage.setItem(profileKey, JSON.stringify(profile))
+  }, [hydrated, profile, profileKey])
 
   useEffect(() => {
     if (!hydrated) return
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+    localStorage.setItem(storageKey, JSON.stringify({
       step,
       siteUrl,
       analysis,
@@ -223,7 +253,7 @@ export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnable
       bulkTemplateVersion: BULK_TEMPLATE_VERSION,
       excludedIds,
     }))
-  }, [hydrated, step, siteUrl, analysis, targetMarket, goal, hint, count, result, drafts, bulkTemplate, excludedIds])
+  }, [hydrated, step, siteUrl, analysis, targetMarket, goal, hint, count, result, drafts, bulkTemplate, excludedIds, storageKey])
 
   useEffect(() => {
     if (!hydrated) return
@@ -300,6 +330,46 @@ export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnable
     const headers = new Headers(init?.headers)
     headers.set('Authorization', `Bearer ${token}`)
     return fetch(path, { ...init, headers })
+  }
+
+  async function saveProfile() {
+    if (!profileComplete) {
+      setError('氏名・会社名・事業者住所・連絡先を入力してください。')
+      return
+    }
+    if (profile.websiteUrl.trim() && !isPublicUrl(normalizeUrl(profile.websiteUrl))) {
+      setError('自社ウェブサイトのURLを確認してください。')
+      return
+    }
+    if (profile.salesDeckUrl.trim() && !isPublicUrl(normalizeUrl(profile.salesDeckUrl))) {
+      setError('営業資料URLを確認してください。')
+      return
+    }
+    if (!supabase) {
+      setError('ログイン機能が設定されていません。')
+      return
+    }
+
+    setProfileSaveBusy(true)
+    setProfileSaved(false)
+    setError('')
+    const normalizedProfile = {
+      ...profile,
+      websiteUrl: profile.websiteUrl.trim() ? normalizeUrl(profile.websiteUrl) : '',
+      salesDeckUrl: profile.salesDeckUrl.trim() ? normalizeUrl(profile.salesDeckUrl) : '',
+      attachLooqDeck: profile.attachLooqDeck && userEmail.endsWith('@looq.icu'),
+    }
+    const { error: saveError } = await supabase.auth.updateUser({
+      data: { sales_profile: normalizedProfile },
+    })
+    setProfileSaveBusy(false)
+    if (saveError) {
+      setError(`差出人情報を保存できませんでした: ${saveError.message}`)
+      return
+    }
+    setProfile(normalizedProfile)
+    setProfileSaved(true)
+    setNotice('差出人情報をこのGoogleアカウント専用に保存しました。')
   }
 
   async function analyzeSite() {
@@ -495,6 +565,9 @@ export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnable
           offering: analysis.offering,
           valueProp: analysis.valueProp,
           serviceNote: profile.serviceNote,
+          senderWebsite: profile.websiteUrl,
+          salesDeckUrl: profile.salesDeckUrl,
+          attachLooqDeck: profile.attachLooqDeck && userEmail.endsWith('@looq.icu'),
           tone: profile.tone,
           language: profile.language,
         }),
@@ -556,7 +629,7 @@ export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnable
       return message
     }
 
-    const fullBody = `${prepareSalesBody(draft.body)}\n\n${buildFooter(profile)}`
+    const fullBody = `${prepareSalesBody(draft.body, profile)}\n\n${buildFooter(profile)}`
     setDrafts((current) => ({
       ...current,
       [item.lead.id]: { ...draft, state: 'sending' },
@@ -577,6 +650,7 @@ export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnable
           approvedBy: userEmail,
           confirmed: true,
           confirmationText: 'APPROVE_AND_SEND',
+          attachLooqDeck: profile.attachLooqDeck && userEmail.endsWith('@looq.icu'),
         }),
       })
       const data = await response.json().catch(() => ({}))
@@ -626,7 +700,7 @@ export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnable
 
   function resetWorkspace() {
     if (!window.confirm('現在の分析・リード・下書きを消して、新しく始めますか？')) return
-    localStorage.removeItem(STORAGE_KEY)
+    localStorage.removeItem(storageKey)
     setStep(1)
     setSiteUrl('')
     setAnalysis(null)
@@ -967,17 +1041,17 @@ export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnable
                   <div className="flex flex-col gap-2 border-b border-[#d9dbd5] pb-4 sm:flex-row sm:items-end sm:justify-between">
                     <div>
                       <p className="text-xs font-black tracking-[0.12em] text-[#bc3f34]">差出人情報</p>
-                      <h2 className="mt-1 text-xl font-black">法令対応フッターを自動挿入</h2>
+                      <h2 className="mt-1 text-xl font-black">自分の会社情報を設定</h2>
                     </div>
-                    <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-800">ログイン情報から自動設定済み</span>
+                    <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-800">Googleアカウントごとに保存</span>
                   </div>
-                  <dl className="mt-5 grid gap-px overflow-hidden rounded-md border border-[#d9dbd5] bg-[#d9dbd5] md:grid-cols-2">
-                    <AutoProfileItem label="氏名" value={profile.senderName} />
-                    <AutoProfileItem label="会社名" value={profile.senderCompany} />
-                    <AutoProfileItem label="事業者住所" value={profile.senderAddress} />
-                    <AutoProfileItem label="連絡先" value={profile.senderContact} />
-                  </dl>
                   <div className="mt-5 grid gap-4 md:grid-cols-2">
+                    <Field label="氏名" required><input className="field-input" value={profile.senderName} onChange={(event) => { setProfile({ ...profile, senderName: event.target.value }); setProfileSaved(false) }} placeholder="例: 山田太郎" /></Field>
+                    <Field label="会社名" required><input className="field-input" value={profile.senderCompany} onChange={(event) => { setProfile({ ...profile, senderCompany: event.target.value }); setProfileSaved(false) }} placeholder="例: 株式会社○○" /></Field>
+                    <Field label="事業者住所" required><input className="field-input" value={profile.senderAddress} onChange={(event) => { setProfile({ ...profile, senderAddress: event.target.value }); setProfileSaved(false) }} placeholder="例: 東京都渋谷区…" /></Field>
+                    <Field label="連絡先" required><input className="field-input" value={profile.senderContact} onChange={(event) => { setProfile({ ...profile, senderContact: event.target.value }); setProfileSaved(false) }} placeholder={userEmail} /></Field>
+                    <Field label="自社ウェブサイト"><input className="field-input" value={profile.websiteUrl} onChange={(event) => { setProfile({ ...profile, websiteUrl: event.target.value }); setProfileSaved(false) }} placeholder="https://example.com/" /></Field>
+                    <Field label="営業資料URL"><input className="field-input" value={profile.salesDeckUrl} onChange={(event) => { setProfile({ ...profile, salesDeckUrl: event.target.value }); setProfileSaved(false) }} placeholder="Google Driveなどの共有URL" /></Field>
                     <Field label="提案内容の補足"><input className="field-input" value={profile.serviceNote} onChange={(event) => setProfile({ ...profile, serviceNote: event.target.value })} placeholder="例: グループ対応 / 導入支援 / 実績" /></Field>
                     <Field label="メール言語">
                       <select className="field-input" value={profile.language} onChange={(event) => setProfile({ ...profile, language: event.target.value as SenderProfile['language'] })}>
@@ -985,6 +1059,22 @@ export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnable
                         <option value="Japanese">日本語</option>
                       </select>
                     </Field>
+                  </div>
+                  {userEmail.endsWith('@looq.icu') && (
+                    <label className="mt-4 flex items-center gap-3 rounded-md border border-[#d9dbd5] bg-white p-4 text-sm font-bold">
+                      <input
+                        type="checkbox"
+                        checked={profile.attachLooqDeck}
+                        onChange={(event) => { setProfile({ ...profile, attachLooqDeck: event.target.checked }); setProfileSaved(false) }}
+                      />
+                      LOOQ_pitchdeck_JP.pdf を送信時に添付する
+                    </label>
+                  )}
+                  <div className="mt-4 flex items-center justify-end gap-3">
+                    {profileSaved && <span className="text-xs font-black text-emerald-700">保存済み</span>}
+                    <SecondaryButton onClick={() => void saveProfile()} disabled={profileSaveBusy || !profileComplete}>
+                      <ShieldCheck size={16} /> {profileSaveBusy ? '保存中…' : 'このアカウントに保存'}
+                    </SecondaryButton>
                   </div>
                   <div className="mt-5 rounded-md border border-dashed border-[#b9bdb6] bg-white p-4">
                     <p className="text-xs font-black tracking-[0.08em] text-[#5f656c]">各メールの末尾へ自動挿入される内容</p>
@@ -1020,13 +1110,20 @@ export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnable
                     自動差し替え： <code>{'{{宛名}}'}</code> <code>{'{{会社名}}'}</code> <code>{'{{差出人名}}'}</code> <code>{'{{自社名}}'}</code> <code>{'{{提案内容}}'}</code>
                     <br />宛名が見つからない場合は「会社名 ご担当者様」にします。
                   </div>
-                  <div className="mt-3 flex flex-col gap-2 rounded-md border border-emerald-200 bg-emerald-50 p-4 text-xs font-bold text-emerald-900 sm:flex-row sm:items-center sm:justify-between">
-                    <span className="inline-flex items-center gap-2"><Paperclip size={15} /> LOOQ_pitchdeck_JP.pdf（約2.3MB）を全メールへ自動添付</span>
-                    <span className="flex flex-wrap gap-3">
-                      <a href={SALES_DECK_DRIVE_URL} target="_blank" rel="noreferrer" className="underline">Google Driveで開く</a>
-                      <a href="/sales-assets/LOOQ_pitchdeck_JP.pdf" target="_blank" rel="noreferrer" className="underline">添付PDFを確認</a>
-                    </span>
-                  </div>
+                  {(profile.salesDeckUrl || (profile.attachLooqDeck && userEmail.endsWith('@looq.icu'))) && (
+                    <div className="mt-3 flex flex-col gap-2 rounded-md border border-emerald-200 bg-emerald-50 p-4 text-xs font-bold text-emerald-900 sm:flex-row sm:items-center sm:justify-between">
+                      <span className="inline-flex items-center gap-2">
+                        <Paperclip size={15} />
+                        {profile.attachLooqDeck && userEmail.endsWith('@looq.icu')
+                          ? 'LOOQ_pitchdeck_JP.pdfを全メールへ自動添付'
+                          : '営業資料URLを全メールの本文へ自動挿入'}
+                      </span>
+                      <span className="flex flex-wrap gap-3">
+                        {profile.salesDeckUrl && <a href={normalizeUrl(profile.salesDeckUrl)} target="_blank" rel="noreferrer" className="underline">営業資料を確認</a>}
+                        {profile.attachLooqDeck && userEmail.endsWith('@looq.icu') && <a href="/sales-assets/LOOQ_pitchdeck_JP.pdf" target="_blank" rel="noreferrer" className="underline">添付PDFを確認</a>}
+                      </span>
+                    </div>
+                  )}
                   <div className="mt-5 flex justify-end">
                     <PrimaryButton
                       onClick={applyBulkTemplate}
@@ -1169,7 +1266,7 @@ export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnable
                 {drafted.map((item) => {
                   const draft = drafts[item.lead.id]
                   const contact = item.contact
-                  const fullEmail = `${prepareSalesBody(draft.body)}\n\n${buildFooter(profile)}`
+                  const fullEmail = `${prepareSalesBody(draft.body, profile)}\n\n${buildFooter(profile)}`
                   return (
                     <article key={item.lead.id} className="rounded-lg border border-[#d9dbd5] bg-white p-5">
                       <div className="flex flex-col gap-3 border-b border-[#e2e4df] pb-4 sm:flex-row sm:items-start sm:justify-between">
@@ -1187,12 +1284,16 @@ export default function SalesAgent({ userEmail, gmailConnected, googleAuthEnable
                       </div>
                       <div className="mt-4">
                         <p className="font-black">{draft.subject}</p>
-                        <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-[#eef2f7] px-3 py-1.5 text-xs font-black text-[#2b4c7e]">
-                          <Paperclip size={14} /> LOOQ_pitchdeck_JP.pdf
-                        </div>
-                        <a href={SALES_DECK_DRIVE_URL} target="_blank" rel="noreferrer" className="ml-3 inline-flex items-center gap-1 text-xs font-bold text-[#2b4c7e] underline">
-                          資料をGoogle Driveで確認 <ExternalLink size={13} />
-                        </a>
+                        {profile.attachLooqDeck && userEmail.endsWith('@looq.icu') && (
+                          <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-[#eef2f7] px-3 py-1.5 text-xs font-black text-[#2b4c7e]">
+                            <Paperclip size={14} /> LOOQ_pitchdeck_JP.pdf
+                          </div>
+                        )}
+                        {profile.salesDeckUrl && (
+                          <a href={normalizeUrl(profile.salesDeckUrl)} target="_blank" rel="noreferrer" className="ml-3 inline-flex items-center gap-1 text-xs font-bold text-[#2b4c7e] underline">
+                            営業資料を確認 <ExternalLink size={13} />
+                          </a>
+                        )}
                         <div className="mt-3 max-h-80 overflow-auto whitespace-pre-wrap rounded-md bg-[#f7f7f4] p-4 text-sm leading-7">{fullEmail}</div>
                       </div>
                       <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
@@ -1255,15 +1356,6 @@ function Field({ label, required, children }: { label: string; required?: boolea
       </span>
       {children}
     </label>
-  )
-}
-
-function AutoProfileItem({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="bg-white p-4">
-      <dt className="text-[11px] font-black tracking-[0.08em] text-[#6b7076]">{label}</dt>
-      <dd className="mt-1 text-sm font-black leading-6 text-[#20242b]">{value}</dd>
-    </div>
   )
 }
 
@@ -1611,7 +1703,7 @@ function personalizeTemplate(
     .replaceAll('{{会社名}}', company)
     .replaceAll('{{差出人名}}', profile.senderName.trim())
     .replaceAll('{{自社名}}', profile.senderCompany.trim())
-    .replaceAll('{{提案内容}}', analysis?.offering?.trim() || profile.serviceNote.trim() || '弊社サービス')
+    .replaceAll('{{提案内容}}', profile.serviceNote.trim() || analysis?.offering?.trim() || '弊社サービス')
 }
 
 function formatReasonForFit(lead: Lead) {
@@ -1627,30 +1719,55 @@ function displayHost(value: string) {
   return safeHost(value) || value
 }
 
-function prepareSalesBody(value: string) {
-  const body = value
-    .trim()
-    .replace(/\n+\s*石田雄大\s*\n+\s*LOOQ Japan\s*$/u, '')
-    .trim()
+function prepareSalesBody(value: string, profile: SenderProfile) {
+  const body = value.trim()
   const japanese = /[ぁ-んァ-ヶ一-龠々]/.test(body)
+  const websiteUrl = profile.websiteUrl.trim() ? normalizeUrl(profile.websiteUrl) : ''
+  const salesDeckUrl = profile.salesDeckUrl.trim() ? normalizeUrl(profile.salesDeckUrl) : ''
   const additions = [
-    body.includes('https://www.looq.jp/')
-      ? ''
-      : japanese
-        ? 'LOOQ Japan ウェブサイト：\nhttps://www.looq.jp/'
-        : 'LOOQ Japan website:\nhttps://www.looq.jp/',
-    body.includes(SALES_DECK_DRIVE_URL)
-      ? ''
-      : japanese
-        ? `サービス資料（Google Drive）：\n${SALES_DECK_DRIVE_URL}`
-        : `Service deck (Google Drive):\n${SALES_DECK_DRIVE_URL}`,
-    body.includes('LOOQ_pitchdeck_JP.pdf')
-      ? ''
-      : japanese
+    websiteUrl && !body.includes(websiteUrl)
+      ? japanese
+        ? `${profile.senderCompany} ウェブサイト：\n${websiteUrl}`
+        : `${profile.senderCompany} website:\n${websiteUrl}`
+      : '',
+    salesDeckUrl && !body.includes(salesDeckUrl)
+      ? japanese
+        ? `サービス資料：\n${salesDeckUrl}`
+        : `Service deck:\n${salesDeckUrl}`
+      : '',
+    profile.attachLooqDeck && !body.includes('LOOQ_pitchdeck_JP.pdf')
+      ? japanese
         ? 'サービス資料「LOOQ_pitchdeck_JP.pdf」も添付しておりますので、あわせてご覧ください。'
-        : 'I have also attached our service deck, LOOQ_pitchdeck_JP.pdf, for reference.',
+        : 'I have also attached our service deck, LOOQ_pitchdeck_JP.pdf, for reference.'
+      : '',
   ].filter(Boolean)
   return additions.length ? `${body}\n\n${additions.join('\n\n')}` : body
+}
+
+function profileForUser(email: string, userName: string, initialProfile?: Partial<SenderProfile>): SenderProfile {
+  const normalizedEmail = email.trim().toLowerCase()
+  const looqUser = normalizedEmail.endsWith('@looq.icu')
+  const yudai = normalizedEmail === 'yudai@looq.icu'
+  const defaults: SenderProfile = {
+    ...emptyProfile,
+    senderName: userName || (yudai ? '石田雄大' : ''),
+    senderCompany: looqUser ? 'LOOQ Japan' : '',
+    senderAddress: yudai ? '〒150-0002 東京都渋谷区渋谷2-19-19 ワコー宮益坂ビル5階' : '',
+    senderContact: normalizedEmail,
+    websiteUrl: looqUser ? 'https://www.looq.jp/' : '',
+    salesDeckUrl: looqUser ? SALES_DECK_DRIVE_URL : '',
+    attachLooqDeck: looqUser,
+  }
+  return {
+    ...defaults,
+    ...initialProfile,
+    senderContact: initialProfile?.senderContact?.trim() || normalizedEmail,
+    attachLooqDeck: looqUser && initialProfile?.attachLooqDeck !== false,
+  }
+}
+
+function bulkTemplateForUser(email: string) {
+  return email.trim().toLowerCase().endsWith('@looq.icu') ? looqBulkTemplate : genericBulkTemplate
 }
 
 function buildFooter(profile: SenderProfile) {

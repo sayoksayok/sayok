@@ -86,8 +86,6 @@ SUPABASE_SERVICE_ROLE_KEY=
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 GOOGLE_TOKEN_ENCRYPTION_KEY=
-SALES_AGENT_ALLOWED_EMAIL=yudai@looq.icu
-NEXT_PUBLIC_SALES_AGENT_ALLOWED_EMAIL=yudai@looq.icu
 SALES_AGENT_DAILY_SEND_LIMIT=20
 ```
 
@@ -98,7 +96,9 @@ deployment so the consent grant includes `gmail.send`.
 
 ## Safety
 
-- The sales workspace is visible only to the configured owner login.
+- Every Google user receives a separate owner-only sales workspace.
+- Gmail tokens, sender settings, drafts, and send history are scoped to the authenticated user.
+- A connected Gmail address must exactly match the Google account used to log in.
 - The user edits and approves every external message.
 - Gmail sending requires a separate, irreversible confirmation click.
 - Server routes reject missing confirmation, wrong-account sessions, suppressed

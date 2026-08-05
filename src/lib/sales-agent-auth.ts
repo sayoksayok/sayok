@@ -1,8 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { requireWorkOsUser, type WorkOsServerContext } from '@/lib/work-os-server'
 
-export const salesAgentAllowedEmail = (process.env.SALES_AGENT_ALLOWED_EMAIL || 'yudai@looq.icu').trim().toLowerCase()
-
 export type SalesAgentServerContext = WorkOsServerContext & {
   workspaceId: string
 }
@@ -14,12 +12,7 @@ export async function requireSalesAgentUser(
   if (context instanceof NextResponse) return context
 
   const email = context.user.email?.trim().toLowerCase() || ''
-  if (!email || email !== salesAgentAllowedEmail) {
-    return NextResponse.json(
-      { error: `${salesAgentAllowedEmail} のログインのみ利用できます。` },
-      { status: 403 },
-    )
-  }
+  if (!email) return NextResponse.json({ error: 'Googleアカウントのメールを確認できません。' }, { status: 403 })
 
   const { data: existingWorkspace, error: workspaceLookupError } = await context.admin
     .from('work_os_workspaces')
@@ -34,12 +27,17 @@ export async function requireSalesAgentUser(
 
   let workspaceId = existingWorkspace?.id as string | undefined
   if (!workspaceId) {
+    const displayName = String(
+      context.user.user_metadata?.full_name
+      || context.user.user_metadata?.name
+      || email,
+    ).trim()
     const { data: createdWorkspace, error: createWorkspaceError } = await context.admin
       .from('work_os_workspaces')
       .insert({
         owner_id: context.user.id,
-        name: 'SayOK Sales',
-        company_name: 'LOOQ',
+        name: `${displayName} Sales`,
+        company_name: null,
         timezone: 'Asia/Tokyo',
       })
       .select('id')
