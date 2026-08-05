@@ -68,6 +68,55 @@ type RuntimeKeys = {
   apolloApiKey: string
 }
 
+type LeadCampaign = {
+  id: 'default' | 'dogeday_2026_sponsorship'
+  label: string
+  brief: string
+  minConfidence: number
+  excludedTerms: string[]
+  excludedDomains: string[]
+}
+
+const DEFAULT_CAMPAIGN: LeadCampaign = {
+  id: 'default',
+  label: 'General lead discovery',
+  brief: '',
+  minConfidence: 0.25,
+  excludedTerms: [],
+  excludedDomains: [],
+}
+
+const DOGEDAY_CAMPAIGN: LeadCampaign = {
+  id: 'dogeday_2026_sponsorship',
+  label: 'DOGE DAY 2026 sponsorship',
+  minConfidence: 0.65,
+  brief: `DOGE DAY 2026 is an Own The Doge event in Japan built around Kabosu's birthday and the global Doge community. The sponsor offer includes brand activations, media placement, speaking opportunities, VIP access, community reach, merchandise or digital-collectible collaboration, and access to crypto and consumer-brand decision makers. The best prospects are established organizations with both budget and a credible reason to reach crypto-native, internet-culture, gaming, consumer, Japan/APAC, or community audiences. Never treat a generic B2B vendor as a sponsor merely because it appeared in search.`,
+  excludedTerms: [
+    'revolut',
+    'magic eden',
+    'ledger',
+    'youtooz',
+    'd3.inc',
+    'myetherwallet',
+    'mew.xyz',
+    'fuckjerry',
+    'taschen',
+    'own the doge',
+  ],
+  excludedDomains: [
+    'revolut.com',
+    'magiceden.io',
+    'ledger.com',
+    'youtooz.com',
+    'd3.inc',
+    'myetherwallet.com',
+    'mew.xyz',
+    'fuckjerry.com',
+    'taschen.com',
+    'ownthedoge.com',
+  ],
+}
+
 const BLOCKED_DOMAINS = new Set([
   'bing.com',
   'duckduckgo.com',
@@ -93,6 +142,8 @@ const BLOCKED_DOMAINS = new Set([
   'yahoo.com',
   'gogonihon.com',
   'mylanguageexchange.com',
+  'proofpoint.com',
+  'protection.outlook.com',
   'seitojapanese.com',
 ])
 
@@ -145,6 +196,7 @@ export async function POST(request: NextRequest) {
 
   const input = (await request.json()) as LeadDiscoveryInput
   const keys = getRuntimeKeys(input)
+  const campaign = resolveLeadCampaign(input, auth.user.email || '')
 
   const validationError = validateInput(input)
   if (validationError) {
@@ -157,10 +209,10 @@ export async function POST(request: NextRequest) {
 
   try {
     const website = await scrapeWebsite(input.websiteUrl, keys)
-    const analysis = await analyzeWebsite(input, website, keys)
-    const searchQueries = expandSearchQueries(input, analysis.searchQueries)
-    const braveResults = await searchBrave(searchQueries, input.maxLeads ?? 14, input.targetMarket, keys)
-    const leads = await scoreLeads(input, analysis, braveResults, keys)
+    const analysis = await analyzeWebsite(input, website, keys, campaign)
+    const searchQueries = expandSearchQueries(input, analysis.searchQueries, campaign)
+    const braveResults = await searchBrave(searchQueries, input.maxLeads ?? 14, input.targetMarket, keys, campaign)
+    const leads = await scoreLeads(input, analysis, braveResults, keys, campaign)
     const { contacts, warnings: hunterWarnings } = await discoverContacts(leads, keys)
     const { contacts: apolloContacts, warning: apolloWarning } = await discoverApolloContacts(leads, keys)
     const mergedContacts = prioritizeContacts(mergeContacts([...contacts, ...apolloContacts]))
@@ -169,7 +221,7 @@ export async function POST(request: NextRequest) {
     const finalLeads = prioritizeActionableLeads(leadsWithStatus.map((lead) => {
       const hasOutreach = outreach.some((message) => message.leadId === lead.id)
       return hasOutreach ? { ...lead, status: 'outreach_ready' as LeadStatus } : lead
-    }), mergedContacts, input)
+    }), mergedContacts, input, campaign)
     await saveRunResults(runId, finalLeads, mergedContacts)
     await saveRunSegment(runId, input, analysis, keys.anthropicApiKey)
     await finishLeadRun(runId, 'completed')
@@ -194,7 +246,11 @@ export async function POST(request: NextRequest) {
         apollo: keys.apolloApiKey ? (apolloWarning ? 'attempted_with_warning' : 'connected') : 'not_configured_optional',
         llm: keys.anthropicApiKey ? 'connected' : 'basic_fallback',
       },
-      warnings: [...hunterWarnings, ...(apolloWarning ? [apolloWarning] : [])],
+      warnings: [
+        ...hunterWarnings,
+        ...(apolloWarning ? [apolloWarning] : []),
+        ...campaignWarnings(campaign, finalLeads.length, input.maxLeads ?? 14),
+      ],
     }
 
     return NextResponse.json(result)
@@ -208,6 +264,24 @@ export async function POST(request: NextRequest) {
       { status: 500 },
     )
   }
+}
+
+function resolveLeadCampaign(input: LeadDiscoveryInput, userEmail: string): LeadCampaign {
+  const identity = `${userEmail} ${input.websiteUrl} ${input.senderProfile || ''}`.toLowerCase()
+  const goal = input.goal.toLowerCase()
+  const isOwnTheDoge = userEmail.trim().toLowerCase() === 'dogejapan@ownthedoge.com'
+    || /own\s*the\s*doge|ownthedoge\.com/.test(identity)
+  const isDogeDaySponsorship = /doge\s*day|dogeday/.test(goal)
+    && /sponsor|sponsorship|協賛/.test(goal)
+  return isOwnTheDoge && isDogeDaySponsorship ? DOGEDAY_CAMPAIGN : DEFAULT_CAMPAIGN
+}
+
+function campaignWarnings(campaign: LeadCampaign, found: number, requested: number) {
+  if (campaign.id !== 'dogeday_2026_sponsorship' || found >= requested) return []
+  if (found === 0) {
+    return ['DOGE DAY sponsor search found no candidates that met the campaign quality threshold. Weak or unrelated results were not shown.']
+  }
+  return [`DOGE DAY sponsor search returned ${found} high-fit candidates. Weak, duplicate, and past-partner results were removed instead of padding the list to ${requested}.`]
 }
 
 function getRuntimeKeys(input: LeadDiscoveryInput): RuntimeKeys {
@@ -316,8 +390,13 @@ async function scrapeRelatedPages(url: string) {
   }
 }
 
-async function analyzeWebsite(input: LeadDiscoveryInput, website: { title: string; content: string }, keys: RuntimeKeys): Promise<WebsiteAnalysis> {
-  const fallback = buildBasicAnalysis(input, website)
+async function analyzeWebsite(
+  input: LeadDiscoveryInput,
+  website: { title: string; content: string },
+  keys: RuntimeKeys,
+  campaign: LeadCampaign,
+): Promise<WebsiteAnalysis> {
+  const fallback = buildBasicAnalysis(input, website, campaign)
   if (!keys.anthropicApiKey) return fallback
 
   const prompt = `You are SayOK, a lead discovery operator. Analyze the website and create search queries for finding real organizations to contact. Return only JSON.
@@ -329,7 +408,11 @@ Website title: ${website.title}
 Website content:
 ${website.content}
 
+Campaign context:
+${campaign.brief || 'No additional campaign context.'}
+
 Do not invent leads. Do not invent emails. Search queries must be useful for finding real companies, organizations, distributors, communities, associations, events, agencies, schools, or partners in the target market.
+${campaign.id === 'dogeday_2026_sponsorship' ? 'For this campaign, search for credible sponsors with an actual brand, community, event, or partnership fit. Exclude cybersecurity vendors, email infrastructure, generic enterprise software, agencies selling to the sender, and existing Own The Doge partners. Do not search for DOGE DAY itself; search for prospective sponsor organizations.' : ''}
 
 Return JSON:
 {
@@ -355,9 +438,22 @@ Return JSON:
   }
 }
 
-function buildBasicAnalysis(input: LeadDiscoveryInput, website: { title: string; content: string }): WebsiteAnalysis {
+function buildBasicAnalysis(
+  input: LeadDiscoveryInput,
+  website: { title: string; content: string },
+  campaign: LeadCampaign = DEFAULT_CAMPAIGN,
+): WebsiteAnalysis {
   const target = input.targetMarket
   const goal = input.goal
+  if (campaign.id === 'dogeday_2026_sponsorship') {
+    return {
+      product: 'DOGE DAY 2026 sponsorship and brand collaboration',
+      targetAudience: 'Established crypto, Web3, gaming, consumer, media, payments, collectibles, and loyalty brands with partnership budgets',
+      positioning: campaign.brief,
+      businessModel: 'Event sponsorship and brand collaboration',
+      searchQueries: dogeDaySearchQueries(target),
+    }
+  }
   const base = `${website.title || input.websiteUrl} ${goal} ${target}`
   return {
     product: website.title || input.websiteUrl,
@@ -374,9 +470,12 @@ function buildBasicAnalysis(input: LeadDiscoveryInput, website: { title: string;
   }
 }
 
-function expandSearchQueries(input: LeadDiscoveryInput, queries: string[]) {
+function expandSearchQueries(input: LeadDiscoveryInput, queries: string[], campaign: LeadCampaign = DEFAULT_CAMPAIGN) {
   const target = input.targetMarket
   const goal = input.goal
+  if (campaign.id === 'dogeday_2026_sponsorship') {
+    return [...new Set([...dogeDaySearchQueries(target), ...queries.map((query) => query.trim()).filter(Boolean)])].slice(0, 18)
+  }
   const primaryGoal = goal.split(/\.\s*Ideal customers:/i)[0]?.trim() || goal
   const normalized = `${goal} ${target}`.toLowerCase()
   const priority = new Set<string>()
@@ -444,8 +543,30 @@ function expandSearchQueries(input: LeadDiscoveryInput, queries: string[]) {
   return [...priority, ...additions].slice(0, 18)
 }
 
-async function searchBrave(queries: string[], maxLeads: number, targetMarket: string, keys: RuntimeKeys) {
-  if (!keys.braveSearchApiKey) return searchPublicWeb(queries, maxLeads, targetMarket)
+function dogeDaySearchQueries(targetMarket: string) {
+  const target = targetMarket.trim() || 'United States'
+  return [
+    `${target} crypto exchange brand partnerships sponsorship`,
+    `${target} crypto wallet community partnerships events`,
+    `${target} Web3 gaming brand partnerships sponsorship`,
+    `${target} crypto payments company marketing partnerships`,
+    `${target} digital collectibles platform brand partnerships`,
+    `${target} consumer brand internet culture meme marketing partnerships`,
+    `${target} crypto media event sponsorship partnerships`,
+    `${target} loyalty rewards platform brand partnership sponsorship`,
+    `${target} entertainment company Web3 community partnerships`,
+    `${target} fintech crypto community event sponsor`,
+  ]
+}
+
+async function searchBrave(
+  queries: string[],
+  maxLeads: number,
+  targetMarket: string,
+  keys: RuntimeKeys,
+  campaign: LeadCampaign = DEFAULT_CAMPAIGN,
+) {
+  if (!keys.braveSearchApiKey) return searchPublicWeb(queries, maxLeads, targetMarket, campaign)
 
   const results: BraveResult[] = []
 
@@ -467,10 +588,12 @@ async function searchBrave(queries: string[], maxLeads: number, targetMarket: st
     if (!response.ok) throw new Error(`Brave Search failed for "${query}" with ${response.status}.`)
     const data = (await response.json()) as { web?: { results?: BraveResult[] } }
     results.push(...(data.web?.results || []))
-    if (index >= 4 && uniqueOrganizationResults(results, targetMarket).length >= maxLeads * 2) break
+    if (index >= 4 && uniqueOrganizationResults(results, targetMarket, campaign).length >= maxLeads * 2) break
   }
 
-  return uniqueOrganizationResults(results, targetMarket).sort((a, b) => searchResultScore(b) - searchResultScore(a)).slice(0, maxLeads * 2)
+  return uniqueOrganizationResults(results, targetMarket, campaign)
+    .sort((a, b) => searchResultScore(b, campaign) - searchResultScore(a, campaign))
+    .slice(0, maxLeads * 2)
 }
 
 function braveCountry(targetMarket: string) {
@@ -483,21 +606,28 @@ function braveCountry(targetMarket: string) {
   return ''
 }
 
-async function searchPublicWeb(queries: string[], maxLeads: number, targetMarket: string) {
+async function searchPublicWeb(
+  queries: string[],
+  maxLeads: number,
+  targetMarket: string,
+  campaign: LeadCampaign = DEFAULT_CAMPAIGN,
+) {
   const results: BraveResult[] = []
 
   for (const query of queries.slice(0, 8)) {
     results.push(...(await searchDuckDuckGo(query)))
-    if (uniqueOrganizationResults(results, targetMarket).length < maxLeads) {
+    if (uniqueOrganizationResults(results, targetMarket, campaign).length < maxLeads) {
       results.push(...(await searchYahoo(query)))
     }
-    if (uniqueOrganizationResults(results, targetMarket).length < maxLeads) {
+    if (uniqueOrganizationResults(results, targetMarket, campaign).length < maxLeads) {
       results.push(...(await searchBing(query)))
     }
-    if (uniqueOrganizationResults(results, targetMarket).length >= maxLeads) break
+    if (uniqueOrganizationResults(results, targetMarket, campaign).length >= maxLeads) break
   }
 
-  return uniqueOrganizationResults(results, targetMarket).sort((a, b) => searchResultScore(b) - searchResultScore(a)).slice(0, maxLeads)
+  return uniqueOrganizationResults(results, targetMarket, campaign)
+    .sort((a, b) => searchResultScore(b, campaign) - searchResultScore(a, campaign))
+    .slice(0, maxLeads)
 }
 
 async function searchDuckDuckGo(query: string) {
@@ -622,7 +752,11 @@ function unwrapSearchUrl(rawUrl: string) {
   }
 }
 
-function uniqueOrganizationResults(results: BraveResult[], targetMarket = '') {
+function uniqueOrganizationResults(
+  results: BraveResult[],
+  targetMarket = '',
+  campaign: LeadCampaign = DEFAULT_CAMPAIGN,
+) {
   const seen = new Set<string>()
   const unique: BraveResult[] = []
 
@@ -633,7 +767,8 @@ function uniqueOrganizationResults(results: BraveResult[], targetMarket = '') {
     if (!domain || isBlockedDomain(domain)) continue
     if (isBlockedResult({ ...result, url })) continue
     if (!isResultInTargetMarket({ ...result, url }, targetMarket)) continue
-    const key = domain.replace(/^www\./, '')
+    if (!isCampaignResultEligible({ ...result, url }, campaign)) continue
+    const key = canonicalOrganizationDomain(domain)
     if (seen.has(key)) continue
     seen.add(key)
     unique.push({ ...result, url })
@@ -676,8 +811,9 @@ function isBlockedResult(result: BraveResult) {
   return BLOCKED_RESULT_TERMS.some((term) => text.includes(term))
 }
 
-function searchResultScore(result: BraveResult) {
+function searchResultScore(result: BraveResult, campaign: LeadCampaign = DEFAULT_CAMPAIGN) {
   const text = `${result.title || ''} ${result.description || ''} ${result.url || ''}`.toLowerCase()
+  if (campaign.id === 'dogeday_2026_sponsorship') return dogeDayCandidateScore(result, campaign)
   let score = 0
   if (/\.edu\b|university|college|department|language program|japanese club|student association/.test(text)) score += 6
   if (/japan america society|japan-america society|japanese cultural|cultural center|teachers association/.test(text)) score += 5
@@ -688,17 +824,47 @@ function searchResultScore(result: BraveResult) {
   return score
 }
 
-async function scoreLeads(input: LeadDiscoveryInput, analysis: WebsiteAnalysis, results: BraveResult[], keys: RuntimeKeys): Promise<Lead[]> {
-  const excludedTerms = extractExcludedClientTerms(input)
+function isCampaignResultEligible(result: BraveResult, campaign: LeadCampaign) {
+  if (campaign.id === 'default') return true
+  return dogeDayCandidateScore(result, campaign) >= 4
+}
+
+function dogeDayCandidateScore(result: BraveResult, campaign: LeadCampaign = DOGEDAY_CAMPAIGN) {
+  const domain = canonicalOrganizationDomain(result.url || '')
+  const text = `${result.title || ''} ${result.description || ''} ${domain}`.toLowerCase()
+  if (campaign.excludedDomains.some((excluded) => domain === excluded || domain.endsWith(`.${excluded}`))) return -100
+  if (campaign.excludedTerms.some((term) => text.includes(term))) return -100
+
+  let score = 0
+  if (/\bcrypto|web3|blockchain|bitcoin|wallet|exchange|nft|digital collectible|token|onchain|fintech/.test(text)) score += 5
+  if (/gaming|game studio|entertainment|consumer brand|loyalty|rewards|media platform|streaming|creator|collectible/.test(text)) score += 3
+  if (/brand partnership|partnerships?|sponsor|sponsorship|brand activation|collaboration|community|event marketing/.test(text)) score += 3
+  if (/japan|apac|asia|global|united states|\busa\b/.test(text)) score += 1
+  if (/cybersecurity|email security|threat protection|fraud detection|identity security|enterprise security|proofpoint/.test(text)) score -= 10
+  if (/careers?|jobs?|documentation|developer docs|support portal|help center/.test(text)) score -= 4
+  return score
+}
+
+async function scoreLeads(
+  input: LeadDiscoveryInput,
+  analysis: WebsiteAnalysis,
+  results: BraveResult[],
+  keys: RuntimeKeys,
+  campaign: LeadCampaign = DEFAULT_CAMPAIGN,
+): Promise<Lead[]> {
+  const excludedTerms = [...new Set([...extractExcludedClientTerms(input), ...campaign.excludedTerms])]
   const usableResults = results
     .filter((result) => !isBlockedResult(result) && !isBlockedDomain(extractDomain(result.url || '')))
     .filter((result) => isResultInTargetMarket(result, input.targetMarket))
     .filter((result) => !matchesExcludedClient(result, excludedTerms))
-    .sort((a, b) => searchResultScore(b) - searchResultScore(a))
+    .filter((result) => isCampaignResultEligible(result, campaign))
+    .sort((a, b) => searchResultScore(b, campaign) - searchResultScore(a, campaign))
   if (usableResults.length === 0) return []
 
   if (!keys.anthropicApiKey) {
-    return usableResults.map((result, index) => resultToLead(result, index, input))
+    return dedupeLeadsByOrganization(
+      usableResults.map((result, index) => resultToLead(result, index, input, campaign)),
+    ).slice(0, input.maxLeads ?? 14)
   }
 
   const candidates = usableResults.map((result, index) => ({
@@ -716,12 +882,15 @@ Goal: ${input.goal}
 Target market: ${input.targetMarket}
 Business: ${analysis.product}
 Target audience: ${analysis.targetAudience}
+Campaign: ${campaign.label}
+Campaign qualification brief: ${campaign.brief || 'Use the user goal and business analysis.'}
 Do not return the user's past/existing clients as new leads. Excluded past/existing clients: ${excludedTerms.length ? excludedTerms.join(', ') : 'none provided'}
 
 Candidates:
 ${JSON.stringify(candidates, null, 2)}
 
-Use only the provided candidates. Do not create new organizations. Return 12 to 18 candidates when enough real candidates exist. The target market is a hard location filter: do not label a company as being in the target country merely because the query mentioned that country. Exclude foreign-country domains and candidates without location evidence. Exclude the user's past/existing clients, encyclopedias, search portals, social networks, job boards, generic directories, and pages with no practical outreach value.
+Use only the provided candidates. Do not create new organizations. Never add a candidate just to reach a requested count. Return fewer candidates when the evidence or commercial fit is weak. The target market is a hard location filter: do not label a company as being in the target country merely because the query mentioned that country. Exclude foreign-country domains and candidates without location evidence. Exclude the user's past/existing clients, encyclopedias, search portals, social networks, job boards, generic directories, email-security or redirect domains, and pages with no practical outreach value.
+${campaign.id === 'dogeday_2026_sponsorship' ? 'For every accepted candidate, explain why that organization could rationally pay for or activate a DOGE DAY sponsorship. Reject generic enterprise vendors and any candidate whose only connection is a keyword in the search query. Return each company/domain once. Use confidence below 0.65 for any uncertain candidate so it will be removed.' : ''}
 
 Return JSON:
 {
@@ -743,18 +912,26 @@ Return JSON:
     const data = await callClaude(prompt, 3500, keys)
     parsed = parseJson<{ leads?: Partial<Lead>[] }>(data)
   } catch {
-    return usableResults.map((result, index) => resultToLead(result, index, input))
+    return dedupeLeadsByOrganization(
+      usableResults.map((result, index) => resultToLead(result, index, input, campaign)),
+    ).slice(0, input.maxLeads ?? 14)
   }
   const byId = new Map(candidates.map((candidate) => [candidate.id, candidate]))
 
   const qualified = (parsed.leads || [])
     .map((lead, index) => {
-      const candidate = byId.get(String(lead.id)) || candidates[index]
+      const candidate = campaign.id === 'dogeday_2026_sponsorship'
+        ? byId.get(String(lead.id))
+        : byId.get(String(lead.id)) || candidates[index]
       if (!candidate) return null
       return {
         id: String(lead.id || candidate.id),
         organizationName: String(lead.organizationName || candidate.title),
-        organizationWebsite: normalizeHomepage(String(lead.organizationWebsite || candidate.url || '')),
+        organizationWebsite: normalizeHomepage(String(
+          campaign.id === 'dogeday_2026_sponsorship'
+            ? candidate.url || ''
+            : lead.organizationWebsite || candidate.url || '',
+        )),
         category: String(lead.category || 'organization'),
         country: String(lead.country || input.targetMarket),
         reasonForFit: String(lead.reasonForFit || candidate.description || 'Matched by real search result.'),
@@ -764,21 +941,26 @@ Return JSON:
       }
     })
     .filter((lead): lead is Lead => Boolean(lead))
-    .filter((lead) => lead.confidence >= 0.25 && !isBlockedDomain(extractDomain(lead.organizationWebsite)))
+    .filter((lead) => lead.confidence >= campaign.minConfidence && !isBlockedDomain(extractDomain(lead.organizationWebsite)))
     .filter((lead) => !isBlockedResult({ title: lead.organizationName, description: lead.reasonForFit, url: lead.organizationWebsite }))
     .filter((lead) => !matchesExcludedLead(lead, excludedTerms))
+    .filter((lead) => isCampaignResultEligible({ title: lead.organizationName, description: lead.reasonForFit, url: lead.sourceUrl || lead.organizationWebsite }, campaign))
 
-  const qualifiedDomains = new Set(qualified.map((lead) => extractDomain(lead.organizationWebsite).replace(/^www\./, '')))
+  if (campaign.id === 'dogeday_2026_sponsorship') {
+    return dedupeLeadsByOrganization(qualified).slice(0, input.maxLeads ?? 14)
+  }
+
+  const qualifiedDomains = new Set(qualified.map((lead) => canonicalOrganizationDomain(lead.organizationWebsite)))
   const supplemental = usableResults
-    .map((result, index) => resultToLead(result, index + qualified.length, input))
+    .map((result, index) => resultToLead(result, index + qualified.length, input, campaign))
     .filter((lead) => {
-      const domain = extractDomain(lead.organizationWebsite).replace(/^www\./, '')
+      const domain = canonicalOrganizationDomain(lead.organizationWebsite)
       if (!domain || qualifiedDomains.has(domain)) return false
       qualifiedDomains.add(domain)
       return !matchesExcludedLead(lead, excludedTerms)
     })
 
-  return [...qualified, ...supplemental].slice(0, 18)
+  return dedupeLeadsByOrganization([...qualified, ...supplemental]).slice(0, 18)
 }
 
 function extractExcludedClientTerms(input: LeadDiscoveryInput) {
@@ -832,9 +1014,15 @@ function matchesExcludedLead(lead: Lead, excludedTerms: string[]) {
   }, excludedTerms)
 }
 
-function resultToLead(result: BraveResult, index: number, input: LeadDiscoveryInput): Lead {
+function resultToLead(
+  result: BraveResult,
+  index: number,
+  input: LeadDiscoveryInput,
+  campaign: LeadCampaign = DEFAULT_CAMPAIGN,
+): Lead {
   const organizationName = cleanTitle(result.title || extractDomain(result.url || '') || `Lead ${index + 1}`)
-  const domain = extractDomain(result.url || '').replace(/^www\./, '')
+  const domain = canonicalOrganizationDomain(result.url || '')
+  const campaignScore = searchResultScore(result, campaign)
   return {
     id: `lead_${index + 1}`,
     organizationName,
@@ -843,9 +1031,23 @@ function resultToLead(result: BraveResult, index: number, input: LeadDiscoveryIn
     country: input.targetMarket,
     reasonForFit: result.description || `${input.targetMarket}の営業候補として、${domain || organizationName}の公式サイトを公開検索で確認しました。`,
     sourceUrl: result.url || '',
-    confidence: 0.5,
+    confidence: campaign.id === 'dogeday_2026_sponsorship'
+      ? clampConfidence(0.58 + Math.min(Math.max(campaignScore - 4, 0), 6) * 0.04)
+      : 0.5,
     status: 'found',
   }
+}
+
+function dedupeLeadsByOrganization(leads: Lead[]) {
+  const seen = new Set<string>()
+  return leads.filter((lead) => {
+    const domain = canonicalOrganizationDomain(lead.organizationWebsite || lead.sourceUrl)
+    const name = normalizeExcludedTerm(lead.organizationName)
+    const key = domain || name
+    if (!key || seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
 }
 
 function inferLeadCategory(value: string) {
@@ -1149,14 +1351,19 @@ function applyLeadStatuses(leads: Lead[], contacts: Contact[]) {
   })
 }
 
-function prioritizeActionableLeads(leads: Lead[], contacts: Contact[], input: LeadDiscoveryInput) {
+function prioritizeActionableLeads(
+  leads: Lead[],
+  contacts: Contact[],
+  input: LeadDiscoveryInput,
+  campaign: LeadCampaign = DEFAULT_CAMPAIGN,
+) {
   const contactLeadIds = new Set(
     contacts
       .filter((contact) => contact.email && contact.emailStatus !== 'not_found')
       .map((contact) => contact.leadId),
   )
-  const excludedTerms = extractExcludedClientTerms(input)
-  const usable = leads
+  const excludedTerms = [...new Set([...extractExcludedClientTerms(input), ...campaign.excludedTerms])]
+  const usable = dedupeLeadsByOrganization(leads
     .filter((lead) => !isBlockedResult({
       title: lead.organizationName,
       description: lead.reasonForFit,
@@ -1168,6 +1375,12 @@ function prioritizeActionableLeads(leads: Lead[], contacts: Contact[], input: Le
       url: lead.sourceUrl || lead.organizationWebsite,
     }, input.targetMarket))
     .filter((lead) => !matchesExcludedLead(lead, excludedTerms))
+    .filter((lead) => lead.confidence >= campaign.minConfidence)
+    .filter((lead) => isCampaignResultEligible({
+      title: lead.organizationName,
+      description: lead.reasonForFit,
+      url: lead.sourceUrl || lead.organizationWebsite,
+    }, campaign)))
 
   return usable
     .sort((a, b) => {
@@ -1176,7 +1389,7 @@ function prioritizeActionableLeads(leads: Lead[], contacts: Contact[], input: Le
       if (aHasContact !== bHasContact) return bHasContact - aHasContact
       return b.confidence - a.confidence
     })
-    .slice(0, 12)
+    .slice(0, Math.min(input.maxLeads ?? 12, 14))
 }
 
 async function generateOutreach(
@@ -1346,10 +1559,38 @@ function extractDomain(rawUrl: string) {
   }
 }
 
+const MULTI_LABEL_PUBLIC_SUFFIXES = new Set([
+  'ac.jp',
+  'co.jp',
+  'go.jp',
+  'ne.jp',
+  'or.jp',
+  'co.uk',
+  'org.uk',
+  'com.au',
+  'net.au',
+  'org.au',
+  'co.nz',
+  'com.br',
+  'com.sg',
+])
+
+function canonicalOrganizationDomain(rawUrl: string) {
+  const host = extractDomain(rawUrl).replace(/^www\./, '')
+  if (!host) return ''
+  const labels = host.split('.').filter(Boolean)
+  if (labels.length <= 2 || /^\d+(?:\.\d+){3}$/.test(host)) return host
+  const suffix = labels.slice(-2).join('.')
+  return MULTI_LABEL_PUBLIC_SUFFIXES.has(suffix)
+    ? labels.slice(-3).join('.')
+    : labels.slice(-2).join('.')
+}
+
 function normalizeHomepage(rawUrl: string) {
   try {
     const url = new URL(rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`)
-    return `${url.protocol}//${url.hostname}`
+    const domain = canonicalOrganizationDomain(url.hostname)
+    return `${url.protocol}//${domain || url.hostname}`
   } catch {
     return rawUrl
   }
@@ -1361,11 +1602,18 @@ function clampConfidence(value: number) {
 }
 
 function cleanTitle(title: string) {
-  const cleaned = title
+  let cleaned = title
     .replace(/\s+\|.*$/, '')
     .replace(/\s+-\s+.*$/, '')
     .replace(/\s+/g, ' ')
     .trim()
+  const parts = cleaned.split(/\s+/)
+  if (parts.length % 2 === 0) {
+    const middle = parts.length / 2
+    const first = parts.slice(0, middle).join(' ').toLowerCase()
+    const second = parts.slice(middle).join(' ').toLowerCase()
+    if (first === second) cleaned = parts.slice(0, middle).join(' ')
+  }
   const companyParts = cleaned
     .split(/[：:｜|]/)
     .map((part) => part.trim())

@@ -36,8 +36,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '会社名・商材・差出人情報が必要です。' }, { status: 400 })
     }
     input.attachLooqDeck = input.attachLooqDeck === true && Boolean(auth.user.email?.toLowerCase().endsWith('@looq.icu'))
+    const dogeDayCampaign = isDogeDayDraft(input, auth.user.email || '')
 
-    const fallback = withSalesCollateral(fallbackDraft(input), input)
+    const fallback = withSalesCollateral(fallbackDraft(input, dogeDayCampaign), input)
     const apiKey = process.env.ANTHROPIC_API_KEY
     if (!apiKey) return NextResponse.json({ draft: fallback, source: 'fallback' })
 
@@ -57,11 +58,15 @@ Why this organization may fit: ${input.reason || 'unknown'}
 Evidence from the public source: ${input.evidence || 'unknown'}
 Language: ${input.language || 'English'}
 Tone: ${input.tone || 'professional, concise, and human'}
+Campaign context: ${dogeDayCampaign
+  ? `This is DOGE DAY 2026 sponsorship outreach by Own The Doge. Own The Doge is the steward of the original Doge IP and holds an exclusive license from Atsuko Sato to use the original Doge image. The event in Japan is built around Kabosu's birthday and the global Doge community, with community experiences, internet-culture guests, VIP networking, media moments, and sponsor activations. Available collaboration formats include brand activations, media placement, speaking, merchandise, and digital collectibles. Use these facts selectively; do not dump the whole deck into the email.`
+  : 'No special campaign context.'}
 
 Rules:
 - Use only the supplied facts. Never invent clients, metrics, familiarity, or prior conversations.
 - Personalize the opening using the provided public evidence.
 - Explain one specific, plausible value for this organization.
+- ${dogeDayCampaign ? 'Frame this as a tailored partnership conversation, not a generic sponsorship blast. Connect one verified recipient fact to one relevant DOGE DAY activation and ask who owns brand partnerships, community, or sponsorships.' : 'Keep the proposal relevant to the recipient evidence.'}
 - Keep the body between 120 and 190 words in English, or 250 and 420 Japanese characters.
 - Ask for one low-friction next step.
 - Include the sender website near the end only when one is provided.
@@ -148,7 +153,7 @@ function parseDraft(raw: string): DraftResult {
   }
 }
 
-function fallbackDraft(input: DraftInput): DraftResult {
+function fallbackDraft(input: DraftInput, dogeDayCampaign = false): DraftResult {
   const recipient = input.company || 'your team'
   const safeReason = getUsableReason(input.reason)
   const value = input.valueProp && input.valueProp !== input.offering ? input.valueProp : ''
@@ -163,10 +168,31 @@ function fallbackDraft(input: DraftInput): DraftResult {
     }
   }
 
+  if (dogeDayCampaign) {
+    return {
+      subject: `DOGE DAY 2026 partnership idea for ${recipient}`,
+      body: `Hi,
+
+I am ${input.senderName} from ${input.senderCompany}, the steward of the original Doge IP.
+
+${safeReason || `I came across ${recipient} and saw a possible fit with your community and brand-partnership work.`}
+
+We are preparing DOGE DAY 2026 in Japan around Kabosu's birthday and the global Doge community. The program combines community experiences, internet-culture guests, VIP networking, media moments, and brand activations. For ${recipient}, we would like to explore one relevant activation rather than send a generic sponsorship package.
+
+Would you be open to a short call to see whether this fits your 2026 partnership priorities? If someone else owns sponsorships, community, or brand partnerships, I would appreciate a pointer to the right person.`,
+    }
+  }
+
   return {
     subject: `A practical idea for ${recipient}`,
     body: `Hi,\n\nI am ${input.senderName} from ${input.senderCompany}.\n\n${safeReason || `I came across ${recipient} and saw a possible fit with your work.`}\n\nWe provide ${input.offering}.${value ? ` ${value}` : ''}${offerDetail ? ` We can also support ${offerDetail}.` : ''}\n\nWould you be open to a brief 15-minute conversation to see whether this could be useful for your team? If someone else owns this area, I would appreciate a pointer to the right person.`,
   }
+}
+
+function isDogeDayDraft(input: DraftInput, userEmail: string) {
+  if (userEmail.trim().toLowerCase() !== 'dogejapan@ownthedoge.com') return false
+  const text = `${input.senderCompany || ''} ${input.offering || ''} ${input.serviceNote || ''} ${input.salesDeckUrl || ''}`.toLowerCase()
+  return /own\s*the\s*doge|doge\s*day|dogeday/.test(text)
 }
 
 function getUsableReason(reason?: string) {

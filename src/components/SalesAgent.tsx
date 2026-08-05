@@ -80,8 +80,10 @@ const STORAGE_KEY = 'sayok:sales-agent:v2'
 const LEGACY_PROFILE_KEY = 'sayok:sales-profile:v2'
 const PROFILE_KEY = 'sayok:sales-profile:v3'
 const BULK_CONFIRM_ID = '__bulk_send__'
-const BULK_TEMPLATE_VERSION = 3
+const BULK_TEMPLATE_VERSION = 4
+const LEAD_QUALITY_VERSION = 2
 const SALES_DECK_DRIVE_URL = 'https://drive.google.com/file/d/1p5NZiJnWU2CrnBmn2tb82iZbre7W0x9G/view?usp=sharing'
+const DOGEDAY_DECK_DRIVE_URL = 'https://drive.google.com/file/d/1_wuTyBDHFicPemao96BZ6k0w14mXD2IN/view?usp=sharing'
 
 const looqBulkTemplate: BulkTemplate = {
   subject: '{{会社名}}様｜屋外広告の効果測定について',
@@ -117,6 +119,21 @@ const genericBulkTemplate: BulkTemplate = {
 弊社では、{{提案内容}}を提供しています。貴社のお取り組みにお役立ていただける可能性があると考えております。
 
 まずは15〜20分ほどお時間をいただき、現在のお悩みやお取り組みについてお聞かせいただけますでしょうか。`,
+}
+
+const dogeDayBulkTemplate: BulkTemplate = {
+  subject: 'DOGE DAY 2026 partnership idea for {{会社名}}',
+  body: `Hi {{宛名}},
+
+I am {{差出人名}} from {{自社名}}, the steward of the original Doge IP.
+
+We are preparing DOGE DAY 2026 in Japan around Kabosu's birthday and the global Doge community. The program combines community experiences, internet-culture guests, VIP networking, media moments, and brand activations.
+
+Based on {{会社名}}'s work, we believe there may be a credible fit around community engagement, a branded activation, content, or a broader partnership. We would rather shape one relevant idea with your team than send a generic sponsorship package.
+
+Would you be open to a short call to see whether DOGE DAY fits your 2026 brand or partnership priorities? If someone else owns sponsorships, community, or brand partnerships, a pointer would be appreciated.
+
+The partnership deck is linked below.`,
 }
 
 const emptyProfile: SenderProfile = {
@@ -243,24 +260,27 @@ export default function SalesAgent({ userId, userEmail, userName, initialProfile
           drafts?: Record<string, Draft>
           bulkTemplate?: BulkTemplate
           bulkTemplateVersion?: number
+          leadQualityVersion?: number
           excludedIds?: string[]
         }
-        if (saved.step && saved.step >= 1 && saved.step <= 4) setStep(saved.step)
+        const currentLeadQuality = saved.leadQualityVersion === LEAD_QUALITY_VERSION
+        if (saved.step && saved.step >= 1 && saved.step <= 4) {
+          setStep(!currentLeadQuality && saved.step > 2 ? 2 : saved.step)
+        }
         setSiteUrl(saved.siteUrl || '')
         setAnalysis(saved.analysis || null)
         setTargetMarket(saved.targetMarket || '')
         setGoal(saved.goal || '')
         setHint(saved.hint || '')
         if (saved.count && [5, 8, 10, 14].includes(saved.count)) setCount(saved.count)
-        setResult(saved.result || null)
-        setDrafts(Object.fromEntries(Object.entries(saved.drafts || {}).map(([leadId, draft]) => [
-          leadId,
-          draft,
-        ])))
+        setResult(currentLeadQuality ? saved.result || null : null)
+        setDrafts(currentLeadQuality
+          ? Object.fromEntries(Object.entries(saved.drafts || {}).map(([leadId, draft]) => [leadId, draft]))
+          : {})
         setBulkTemplate(saved.bulkTemplateVersion === BULK_TEMPLATE_VERSION
           ? { ...defaultBulkTemplate, ...saved.bulkTemplate }
           : defaultBulkTemplate)
-        setExcludedIds(saved.excludedIds || [])
+        setExcludedIds(currentLeadQuality ? saved.excludedIds || [] : [])
       }
     } catch {
       localStorage.removeItem(storageKey)
@@ -288,6 +308,7 @@ export default function SalesAgent({ userId, userEmail, userName, initialProfile
       drafts,
       bulkTemplate,
       bulkTemplateVersion: BULK_TEMPLATE_VERSION,
+      leadQualityVersion: LEAD_QUALITY_VERSION,
       excludedIds,
     }))
   }, [hydrated, step, siteUrl, analysis, targetMarket, goal, hint, count, result, drafts, bulkTemplate, excludedIds, storageKey])
@@ -1784,27 +1805,41 @@ function prepareSalesBody(value: string, profile: SenderProfile) {
 function profileForUser(email: string, userName: string, initialProfile?: Partial<SenderProfile>): SenderProfile {
   const normalizedEmail = email.trim().toLowerCase()
   const looqUser = normalizedEmail.endsWith('@looq.icu')
+  const dogeUser = normalizedEmail === 'dogejapan@ownthedoge.com'
   const yudai = normalizedEmail === 'yudai@looq.icu'
   const defaults: SenderProfile = {
     ...emptyProfile,
     senderName: userName || (yudai ? '石田雄大' : ''),
-    senderCompany: looqUser ? 'LOOQ Japan' : '',
+    senderCompany: looqUser ? 'LOOQ Japan' : dogeUser ? 'Own The Doge' : '',
     senderAddress: yudai ? '〒150-0002 東京都渋谷区渋谷2-19-19 ワコー宮益坂ビル5階' : '',
     senderContact: normalizedEmail,
-    websiteUrl: looqUser ? 'https://www.looq.jp/' : '',
-    salesDeckUrl: looqUser ? SALES_DECK_DRIVE_URL : '',
+    websiteUrl: looqUser ? 'https://www.looq.jp/' : dogeUser ? 'https://ownthedoge.com/' : '',
+    salesDeckUrl: looqUser ? SALES_DECK_DRIVE_URL : dogeUser ? DOGEDAY_DECK_DRIVE_URL : '',
     attachLooqDeck: looqUser,
+    serviceNote: dogeUser
+      ? 'DOGE DAY 2026 sponsorships and collaborations including brand activations, media placement, community engagement, VIP access, speaking opportunities, merchandise, and digital-collectible collaborations.'
+      : '',
+    language: dogeUser ? 'English' : 'Japanese',
   }
-  return {
+  const merged = {
     ...defaults,
     ...initialProfile,
-    senderContact: initialProfile?.senderContact?.trim() || normalizedEmail,
     attachLooqDeck: looqUser && initialProfile?.attachLooqDeck !== false,
   }
+  if (!merged.senderName.trim()) merged.senderName = defaults.senderName
+  if (!merged.senderCompany.trim()) merged.senderCompany = defaults.senderCompany
+  if (!merged.senderContact.trim()) merged.senderContact = defaults.senderContact
+  if (!merged.websiteUrl.trim()) merged.websiteUrl = defaults.websiteUrl
+  if (!merged.salesDeckUrl.trim()) merged.salesDeckUrl = defaults.salesDeckUrl
+  if (!merged.serviceNote.trim()) merged.serviceNote = defaults.serviceNote
+  return merged
 }
 
 function bulkTemplateForUser(email: string) {
-  return email.trim().toLowerCase().endsWith('@looq.icu') ? looqBulkTemplate : genericBulkTemplate
+  const normalizedEmail = email.trim().toLowerCase()
+  if (normalizedEmail.endsWith('@looq.icu')) return looqBulkTemplate
+  if (normalizedEmail === 'dogejapan@ownthedoge.com') return dogeDayBulkTemplate
+  return genericBulkTemplate
 }
 
 function buildFooter(profile: SenderProfile) {
