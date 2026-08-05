@@ -960,7 +960,7 @@ Return JSON:
       const relationshipType = campaign.id === 'dogeday_2026_sponsorship'
         ? normalizeDogeDayRelationshipType(lead.relationshipType, candidate)
         : undefined
-      return {
+      const normalizedLead: Lead = {
         id: String(lead.id || candidate.id),
         organizationName: String(lead.organizationName || candidate.title),
         organizationWebsite: normalizeHomepage(String(
@@ -978,6 +978,7 @@ Return JSON:
         status: 'found' as LeadStatus,
         relationshipType,
       }
+      return normalizedLead
     })
     .filter((lead): lead is Lead => Boolean(lead))
     .filter((lead) => lead.confidence >= campaign.minConfidence && !isBlockedDomain(extractDomain(lead.organizationWebsite)))
