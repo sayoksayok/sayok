@@ -14,6 +14,26 @@ type GmailStatus = {
 }
 
 const googleLoginEnabled = process.env.NEXT_PUBLIC_GOOGLE_AUTH_ENABLED === 'true'
+const sessionCheckTimeoutMs = 8_000
+
+async function getSessionWithTimeout(): Promise<Session | null> {
+  if (!supabase) return null
+
+  let timeoutId: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      supabase.auth.getSession().then(({ data, error: sessionError }) => {
+        if (sessionError) throw sessionError
+        return data.session
+      }),
+      new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error('SESSION_CHECK_TIMEOUT')), sessionCheckTimeoutMs)
+      }),
+    ])
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId)
+  }
+}
 
 export default function SalesAgentGate() {
   const [user, setUser] = useState<User | null>(null)
@@ -28,8 +48,8 @@ export default function SalesAgentGate() {
 
   const authenticatedFetch = useCallback(async (path: string, init?: RequestInit) => {
     if (!supabase) throw new Error('ログイン機能が設定されていません。')
-    const { data } = await supabase.auth.getSession()
-    const token = data.session?.access_token
+    const session = await getSessionWithTimeout()
+    const token = session?.access_token
     if (!token) throw new Error('ログインの有効期限が切れました。もう一度ログインしてください。')
     const headers = new Headers(init?.headers)
     headers.set('Authorization', `Bearer ${token}`)
@@ -76,15 +96,19 @@ export default function SalesAgentGate() {
 
     if (!supabase) return
 
-    supabase.auth.getSession().then(({ data }) => {
-      const nextUser = data.session?.user || null
+    getSessionWithTimeout().then((session) => {
+      const nextUser = session?.user || null
       setUser(nextUser)
       setLoading(false)
-      if (data.session && nextUser?.email) {
-        void persistGoogleConnection(data.session)
+      if (session && nextUser?.email) {
+        void persistGoogleConnection(session)
       }
-    }).catch(() => {
-      setError('ログイン状態を確認できませんでした。')
+    }).catch((sessionError: unknown) => {
+      setError(
+        sessionError instanceof Error && sessionError.message === 'SESSION_CHECK_TIMEOUT'
+          ? 'ログイン状態の確認がタイムアウトしました。ページを再読み込みするか、Googleでログインし直してください。'
+          : 'ログイン状態を確認できませんでした。',
+      )
       setLoading(false)
     })
 
