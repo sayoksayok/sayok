@@ -3,6 +3,10 @@ import { requireSalesAgentUser } from '@/lib/sales-agent-auth'
 
 export const maxDuration = 45
 
+const DOGEDAY_2023_URL = 'https://youtu.be/4-Xrxocl904?si=e6G5Y1TmzM7nX03n'
+const DOGEDAY_2024_URL = 'https://x.com/ownthedoge/status/1864041170177036350?s=46&t=uvRkGhFIpkzzPVj8jAkdig'
+const DOGEDAY_2025_URL = 'https://x.com/ownthedoge/status/2001433177357729828?s=46&t=uvRkGhFIpkzzPVj8jAkdig'
+
 type DraftInput = {
   company?: string
   website?: string
@@ -38,7 +42,7 @@ export async function POST(request: NextRequest) {
     input.attachLooqDeck = input.attachLooqDeck === true && Boolean(auth.user.email?.toLowerCase().endsWith('@looq.icu'))
     const dogeDayCampaign = isDogeDayDraft(input, auth.user.email || '')
 
-    const fallback = withSalesCollateral(fallbackDraft(input, dogeDayCampaign), input)
+    const fallback = withSalesCollateral(fallbackDraft(input, dogeDayCampaign), input, dogeDayCampaign)
     const apiKey = process.env.ANTHROPIC_API_KEY
     if (!apiKey) return NextResponse.json({ draft: fallback, source: 'fallback' })
 
@@ -94,7 +98,7 @@ Rules:
 
     const data = (await response.json()) as { content?: Array<{ type?: string; text?: string }> }
     const raw = data.content?.find((item) => item.type === 'text')?.text || ''
-    const draft = withSalesCollateral(parseDraft(raw), input)
+    const draft = withSalesCollateral(parseDraft(raw), input, dogeDayCampaign)
     if (!draft.body || !draft.subject) return NextResponse.json({ draft: fallback, source: 'fallback' })
     return NextResponse.json({ draft, source: 'anthropic' })
   } catch {
@@ -102,7 +106,7 @@ Rules:
   }
 }
 
-function withSalesCollateral(draft: DraftResult, input: DraftInput): DraftResult {
+function withSalesCollateral(draft: DraftResult, input: DraftInput, dogeDayCampaign = false): DraftResult {
   if (!draft.body) return draft
   const language = input.language || 'English'
   const website = publicUrl(input.senderWebsite)
@@ -116,8 +120,10 @@ function withSalesCollateral(draft: DraftResult, input: DraftInput): DraftResult
   const driveLine = language === 'Japanese'
     ? `サービス資料：\n${deckUrl}`
     : `Service deck:\n${deckUrl}`
+  const dogeDayHistory = `Previous DOGE DAY highlights:\n2023 recap: ${DOGEDAY_2023_URL}\n2024: ${DOGEDAY_2024_URL}\n2025: ${DOGEDAY_2025_URL}`
   const additions = [
     website && !draft.body.includes(website) ? websiteLine : '',
+    dogeDayCampaign && !draft.body.includes(DOGEDAY_2023_URL) ? dogeDayHistory : '',
     deckUrl && !draft.body.includes(deckUrl) ? driveLine : '',
     input.attachLooqDeck === true && !draft.body.includes('LOOQ_pitchdeck_JP.pdf') ? attachmentLine : '',
   ].filter(Boolean)

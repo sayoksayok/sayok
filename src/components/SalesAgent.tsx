@@ -80,10 +80,13 @@ const STORAGE_KEY = 'sayok:sales-agent:v2'
 const LEGACY_PROFILE_KEY = 'sayok:sales-profile:v2'
 const PROFILE_KEY = 'sayok:sales-profile:v3'
 const BULK_CONFIRM_ID = '__bulk_send__'
-const BULK_TEMPLATE_VERSION = 4
+const BULK_TEMPLATE_VERSION = 5
 const LEAD_QUALITY_VERSION = 3
 const SALES_DECK_DRIVE_URL = 'https://drive.google.com/file/d/1p5NZiJnWU2CrnBmn2tb82iZbre7W0x9G/view?usp=sharing'
 const DOGEDAY_DECK_DRIVE_URL = 'https://drive.google.com/file/d/1_wuTyBDHFicPemao96BZ6k0w14mXD2IN/view?usp=sharing'
+const DOGEDAY_2023_URL = 'https://youtu.be/4-Xrxocl904?si=e6G5Y1TmzM7nX03n'
+const DOGEDAY_2024_URL = 'https://x.com/ownthedoge/status/1864041170177036350?s=46&t=uvRkGhFIpkzzPVj8jAkdig'
+const DOGEDAY_2025_URL = 'https://x.com/ownthedoge/status/2001433177357729828?s=46&t=uvRkGhFIpkzzPVj8jAkdig'
 
 const looqBulkTemplate: BulkTemplate = {
   subject: '{{会社名}}様｜屋外広告の効果測定について',
@@ -132,6 +135,11 @@ We are preparing DOGE DAY 2026 in Japan around Kabosu's birthday and the global 
 Based on {{会社名}}'s work, we believe there may be a credible fit around community engagement, a branded activation, content, or a broader partnership. We would rather shape one relevant idea with your team than send a generic sponsorship package.
 
 Would you be open to a short call to see whether DOGE DAY fits your 2026 brand or partnership priorities? If someone else owns sponsorships, community, or brand partnerships, a pointer would be appreciated.
+
+Previous DOGE DAY highlights:
+2023 recap: ${DOGEDAY_2023_URL}
+2024: ${DOGEDAY_2024_URL}
+2025: ${DOGEDAY_2025_URL}
 
 The partnership deck is linked below.`,
 }
@@ -1180,6 +1188,16 @@ export default function SalesAgent({ userId, userEmail, userName, initialProfile
                         {profile.salesDeckUrl && <a href={normalizeUrl(profile.salesDeckUrl)} target="_blank" rel="noreferrer" className="underline">営業資料を確認</a>}
                         {profile.attachLooqDeck && userEmail.endsWith('@looq.icu') && <a href="/sales-assets/LOOQ_pitchdeck_JP.pdf" target="_blank" rel="noreferrer" className="underline">添付PDFを確認</a>}
                       </span>
+                    </div>
+                  )}
+                  {userEmail.trim().toLowerCase() === 'dogejapan@ownthedoge.com' && (
+                    <div className="mt-3 rounded-md border border-[#d9dbd5] bg-white p-4 text-xs font-bold text-[#3f454b]">
+                      <p className="font-black text-[#bc3f34]">過去のDOGE DAY実績を全メールへ挿入</p>
+                      <div className="mt-2 flex flex-wrap gap-4">
+                        <a href={DOGEDAY_2023_URL} target="_blank" rel="noreferrer" className="underline">DOGE DAY 2023 recap</a>
+                        <a href={DOGEDAY_2024_URL} target="_blank" rel="noreferrer" className="underline">DOGE DAY 2024</a>
+                        <a href={DOGEDAY_2025_URL} target="_blank" rel="noreferrer" className="underline">DOGE DAY 2025</a>
+                      </div>
                     </div>
                   )}
                   <div className="mt-5 flex justify-end">
