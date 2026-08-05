@@ -237,7 +237,7 @@ export default function SalesAgent({ userId, userEmail, userName, initialProfile
         ? localStorage.getItem(`${LEGACY_PROFILE_KEY}:${userId}`) || localStorage.getItem(LEGACY_PROFILE_KEY)
         : null
       const savedProfile = localStorage.getItem(profileKey) || legacyProfile
-      if (savedProfile) setProfile({ ...defaultProfile, ...JSON.parse(savedProfile) })
+      if (savedProfile) setProfile(mergeProfileDefaults(defaultProfile, JSON.parse(savedProfile)))
     } catch {
       localStorage.removeItem(profileKey)
     }
@@ -1821,11 +1821,15 @@ function profileForUser(email: string, userName: string, initialProfile?: Partia
       : '',
     language: dogeUser ? 'English' : 'Japanese',
   }
-  const merged = {
+  return mergeProfileDefaults(defaults, {
     ...defaults,
     ...initialProfile,
     attachLooqDeck: looqUser && initialProfile?.attachLooqDeck !== false,
-  }
+  })
+}
+
+function mergeProfileDefaults(defaults: SenderProfile, saved?: Partial<SenderProfile>): SenderProfile {
+  const merged: SenderProfile = { ...defaults, ...saved }
   if (!merged.senderName.trim()) merged.senderName = defaults.senderName
   if (!merged.senderCompany.trim()) merged.senderCompany = defaults.senderCompany
   if (!merged.senderContact.trim()) merged.senderContact = defaults.senderContact
