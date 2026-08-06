@@ -250,8 +250,11 @@ export async function POST(request: NextRequest) {
       warnings: [
         ...hunterWarnings,
         ...(apolloWarning ? [apolloWarning] : []),
-        ...(!keys.anthropicApiKey
+        ...(!keys.anthropicApiKey && campaign.id === 'default'
           ? ['AI qualification is unavailable. Unqualified search results were not shown.']
+          : []),
+        ...(!keys.anthropicApiKey && campaign.id === 'dogeday_2026_sponsorship'
+          ? ['AI qualification was unavailable, so DOGE DAY campaign-specific eligibility rules were applied.']
           : []),
         ...campaignWarnings(campaign, finalLeads.length, input.maxLeads ?? 14),
       ],
@@ -917,7 +920,7 @@ async function scoreLeads(
   if (usableResults.length === 0) return []
 
   if (!keys.anthropicApiKey) {
-    return []
+    return dogeDayFallbackLeads(usableResults, input, campaign)
   }
 
   const candidates = usableResults.map((result, index) => ({
@@ -970,7 +973,7 @@ Return JSON:
     const data = await callClaude(prompt, 3500, keys)
     parsed = parseJson<{ leads?: Partial<Lead>[] }>(data)
   } catch {
-    return []
+    return dogeDayFallbackLeads(usableResults, input, campaign)
   }
   const byId = new Map(candidates.map((candidate) => [candidate.id, candidate]))
 
@@ -1010,7 +1013,41 @@ Return JSON:
     .filter((lead) => !matchesExcludedLead(lead, excludedTerms))
     .filter((lead) => isCampaignResultEligible({ title: lead.organizationName, description: lead.reasonForFit, url: lead.sourceUrl || lead.organizationWebsite }, campaign))
 
-  return dedupeLeadsByOrganization(qualified).slice(0, input.maxLeads ?? 14)
+  const deduped = dedupeLeadsByOrganization(qualified)
+  if (deduped.length > 0 || campaign.id !== 'dogeday_2026_sponsorship') {
+    return deduped.slice(0, input.maxLeads ?? 14)
+  }
+
+  return dogeDayFallbackLeads(usableResults, input, campaign)
+}
+
+function dogeDayFallbackLeads(
+  results: BraveResult[],
+  input: LeadDiscoveryInput,
+  campaign: LeadCampaign,
+) {
+  if (campaign.id !== 'dogeday_2026_sponsorship') return []
+
+  const leads = results.flatMap((result, index): Lead[] => {
+    const relationshipType = dogeDayRelationshipType(result, campaign)
+    const score = dogeDayCandidateScore(result, campaign)
+    if (relationshipType === 'reject' || score < 5) return []
+
+    return [{
+      id: `dogeday_${index + 1}`,
+      organizationName: String(result.title || canonicalOrganizationDomain(result.url || '')),
+      organizationWebsite: normalizeHomepage(String(result.url || '')),
+      category: relationshipType === 'media_partner' ? 'media' : 'company',
+      country: input.targetMarket,
+      reasonForFit: dogeDayReason(result, relationshipType),
+      sourceUrl: String(result.url || ''),
+      confidence: clampConfidence(Math.min(0.9, 0.66 + Math.max(0, score - 5) * 0.04)),
+      status: 'found',
+      relationshipType,
+    }]
+  })
+
+  return dedupeLeadsByOrganization(leads).slice(0, input.maxLeads ?? 14)
 }
 
 function extractExcludedClientTerms(input: LeadDiscoveryInput) {

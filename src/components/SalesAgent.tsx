@@ -81,7 +81,7 @@ const LEGACY_PROFILE_KEY = 'sayok:sales-profile:v2'
 const PROFILE_KEY = 'sayok:sales-profile:v3'
 const BULK_CONFIRM_ID = '__bulk_send__'
 const BULK_TEMPLATE_VERSION = 5
-const LEAD_QUALITY_VERSION = 4
+const LEAD_QUALITY_VERSION = 5
 const SALES_DECK_DRIVE_URL = 'https://drive.google.com/file/d/1p5NZiJnWU2CrnBmn2tb82iZbre7W0x9G/view?usp=sharing'
 const DOGEDAY_DECK_DRIVE_URL = 'https://drive.google.com/file/d/1_wuTyBDHFicPemao96BZ6k0w14mXD2IN/view?usp=sharing'
 const DOGEDAY_2023_URL = 'https://youtu.be/4-Xrxocl904?si=e6G5Y1TmzM7nX03n'
@@ -176,6 +176,10 @@ type SalesAgentProps = {
 }
 
 export default function SalesAgent({ userId, userEmail, userName, initialProfile, gmailConnected, googleAuthEnabled, onReconnectGoogle, onSignOut }: SalesAgentProps) {
+  const defaultTargetMarket = userEmail.trim().toLowerCase() === 'dogejapan@ownthedoge.com' ? 'United States' : ''
+  const defaultGoal = userEmail.trim().toLowerCase() === 'dogejapan@ownthedoge.com'
+    ? 'DOGE DAY 2026のスポンサーとアクティベーションパートナーを探す'
+    : ''
   const defaultProfile = useMemo(
     () => profileForUser(userEmail, userName, initialProfile),
     [initialProfile, userEmail, userName],
@@ -186,8 +190,8 @@ export default function SalesAgent({ userId, userEmail, userName, initialProfile
   const [step, setStep] = useState(1)
   const [siteUrl, setSiteUrl] = useState('')
   const [analysis, setAnalysis] = useState<SiteAnalysis | null>(null)
-  const [targetMarket, setTargetMarket] = useState('')
-  const [goal, setGoal] = useState('')
+  const [targetMarket, setTargetMarket] = useState(defaultTargetMarket)
+  const [goal, setGoal] = useState(defaultGoal)
   const [hint, setHint] = useState('')
   const [count, setCount] = useState(8)
   const [result, setResult] = useState<LeadDiscoveryResult | null>(null)
@@ -217,8 +221,8 @@ export default function SalesAgent({ userId, userEmail, userName, initialProfile
     setStep(1)
     setSiteUrl('')
     setAnalysis(null)
-    setTargetMarket('')
-    setGoal('')
+    setTargetMarket(defaultTargetMarket)
+    setGoal(defaultGoal)
     setHint('')
     setCount(8)
     setResult(null)
@@ -277,8 +281,8 @@ export default function SalesAgent({ userId, userEmail, userName, initialProfile
         }
         setSiteUrl(saved.siteUrl || '')
         setAnalysis(saved.analysis || null)
-        setTargetMarket(saved.targetMarket || '')
-        setGoal(saved.goal || '')
+        setTargetMarket(saved.targetMarket || defaultTargetMarket)
+        setGoal(saved.goal || defaultGoal)
         setHint(saved.hint || '')
         if (saved.count && [5, 8, 10, 14].includes(saved.count)) setCount(saved.count)
         setResult(currentLeadQuality ? saved.result || null : null)
@@ -296,7 +300,7 @@ export default function SalesAgent({ userId, userEmail, userName, initialProfile
     } finally {
       setHydratedStorageKey(storageKey)
     }
-  }, [defaultBulkTemplate, defaultProfile, profileKey, storageKey, userEmail])
+  }, [defaultBulkTemplate, defaultGoal, defaultProfile, defaultTargetMarket, profileKey, storageKey, userEmail])
 
   useEffect(() => {
     if (!hydrated) return
@@ -774,8 +778,8 @@ export default function SalesAgent({ userId, userEmail, userName, initialProfile
     setStep(1)
     setSiteUrl('')
     setAnalysis(null)
-    setTargetMarket('')
-    setGoal('')
+    setTargetMarket(defaultTargetMarket)
+    setGoal(defaultGoal)
     setHint('')
     setResult(null)
     setDrafts({})
@@ -1027,7 +1031,7 @@ export default function SalesAgent({ userId, userEmail, userName, initialProfile
                     <div className="flex flex-col gap-3 border-b border-[#d9dbd5] pb-4 sm:flex-row sm:items-end sm:justify-between">
                       <div>
                         <p className="text-xs font-black tracking-[0.12em] text-[#2b4c7e]">営業先候補 {visibleProspects.length}社</p>
-                        <h2 className="mt-1 text-2xl font-black">日本企業の営業先リスト</h2>
+                        <h2 className="mt-1 text-2xl font-black">{result.input.targetMarket || targetMarket}の営業先リスト</h2>
                         <p className="mt-2 text-sm font-semibold text-[#6b7076]">
                           {historyBusy
                             ? '送信履歴と照合中…'
@@ -1055,7 +1059,7 @@ export default function SalesAgent({ userId, userEmail, userName, initialProfile
                     ) : (
                       <div className="mt-5 rounded-lg border border-[#d9dbd5] bg-white p-6">
                         <p className="font-bold">表示できる営業先候補がありませんでした。</p>
-                        <p className="mt-2 text-sm leading-6 text-[#6b7076]">条件を変えてもう一度検索してください。</p>
+                        <p className="mt-2 text-sm leading-6 text-[#6b7076]">検索条件と公開情報を確認し、適合しない候補は表示していません。条件を調整して再検索してください。</p>
                       </div>
                     )}
 
