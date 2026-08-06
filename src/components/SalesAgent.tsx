@@ -81,7 +81,7 @@ const LEGACY_PROFILE_KEY = 'sayok:sales-profile:v2'
 const PROFILE_KEY = 'sayok:sales-profile:v3'
 const BULK_CONFIRM_ID = '__bulk_send__'
 const BULK_TEMPLATE_VERSION = 5
-const LEAD_QUALITY_VERSION = 5
+const LEAD_QUALITY_VERSION = 6
 const SALES_DECK_DRIVE_URL = 'https://drive.google.com/file/d/1p5NZiJnWU2CrnBmn2tb82iZbre7W0x9G/view?usp=sharing'
 const DOGEDAY_DECK_DRIVE_URL = 'https://drive.google.com/file/d/1_wuTyBDHFicPemao96BZ6k0w14mXD2IN/view?usp=sharing'
 const DOGEDAY_2023_URL = 'https://youtu.be/4-Xrxocl904?si=e6G5Y1TmzM7nX03n'

@@ -78,6 +78,14 @@ type LeadCampaign = {
   excludedDomains: string[]
 }
 
+type DogeDaySponsorAccount = {
+  organizationName: string
+  organizationWebsite: string
+  sourceUrl: string
+  relationshipType: LeadRelationshipType
+  reasonForFit: string
+}
+
 const DEFAULT_CAMPAIGN: LeadCampaign = {
   id: 'default',
   label: 'General lead discovery',
@@ -91,7 +99,7 @@ const DOGEDAY_CAMPAIGN: LeadCampaign = {
   id: 'dogeday_2026_sponsorship',
   label: 'DOGE DAY 2026 sponsorship',
   minConfidence: 0.65,
-  brief: `DOGE DAY 2026 is an Own The Doge event in Japan built around Kabosu's birthday and the global Doge community. The sponsor offer includes brand activations, media placement, speaking opportunities, VIP access, community reach, merchandise or digital-collectible collaboration, and access to crypto and consumer-brand decision makers. The best prospects are established organizations with both budget and a credible reason to reach crypto-native, internet-culture, gaming, consumer, Japan/APAC, or community audiences. Never treat a generic B2B vendor as a sponsor merely because it appeared in search.`,
+  brief: `DOGE DAY 2026 is the international celebration of Kabosu's birthday and Doge culture, produced in Japan by Own The Doge. It combines global internet culture with Tokyo and Chiba experiences, VIP networking, community events, media moments, merchandise, digital collectibles, and on-site brand activations. Own The Doge reports more than 100 million social reach and more than 10 million interactions; previous DOGE DAY activity reached more than 2 million accounts. Paid tiers are designed for consumer crypto and Web3 platforms that can fund sponsorship and want community or Japan/APAC relevance. Activation partnerships are for gaming, entertainment, character IP, collectibles, merchandise, and culture brands that can build a real audience experience. Media is limited to one crypto-native partner and is never presented as a cash sponsor. Reject directories, rankings, review sites, agencies, consultants, generic B2B vendors, and companies whose only fit is a search keyword.`,
   excludedTerms: [
     'revolut',
     'magic eden',
@@ -118,6 +126,110 @@ const DOGEDAY_CAMPAIGN: LeadCampaign = {
   ],
 }
 
+// Campaign account list based on the DOGE DAY deck and each organization's official
+// public partnership evidence. Search may add new accounts, but never replaces these
+// with generic directories merely to satisfy the requested count.
+const DOGEDAY_SPONSOR_ACCOUNTS: DogeDaySponsorAccount[] = [
+  {
+    organizationName: 'Robinhood',
+    organizationWebsite: 'https://robinhood.com',
+    sourceUrl: 'https://go.robinhood.com/partner',
+    relationshipType: 'cash_sponsor',
+    reasonForFit: '現金スポンサー候補。Robinhoodの公式パートナーページは、共同マーケティング、スポンサーシップ、インフルエンサー施策、登壇機会を募集しており、消費者向け投資・暗号資産サービスとしてDOGE DAYのコミュニティ施策と直接接続できます。',
+  },
+  {
+    organizationName: 'Kraken',
+    organizationWebsite: 'https://www.kraken.com',
+    sourceUrl: 'https://blog.kraken.com/news/fifa-world-cup-2026-official-crypto-exchange',
+    relationshipType: 'cash_sponsor',
+    reasonForFit: '現金スポンサー候補。Krakenは公式発表でFIFA World Cup 2026のOfficial Crypto Exchange Supporterとなり、世界のファン向けアクティベーションを実施しています。グローバルな暗号資産コミュニティと体験型協賛の実績がDOGE DAYに合います。',
+  },
+  {
+    organizationName: 'MoonPay',
+    organizationWebsite: 'https://www.moonpay.com',
+    sourceUrl: 'https://www.moonpay.com/newsroom/moonpay-x-games-league',
+    relationshipType: 'cash_sponsor',
+    reasonForFit: '現金スポンサー候補。MoonPayはX Games Leagueのタイトルパートナーとして、統合型アクティベーションとパートナーエコシステムを展開しています。消費者向けWeb3決済とカルチャーイベントを結ぶ協賛実績があります。',
+  },
+  {
+    organizationName: 'Coinbase',
+    organizationWebsite: 'https://www.coinbase.com',
+    sourceUrl: 'https://www.coinbase.com/blog/coinbase-becomes-the-first-crypto-partner-to-the-canadian-football-league',
+    relationshipType: 'cash_sponsor',
+    reasonForFit: '現金スポンサー候補。CoinbaseはCanadian Football League初の公式暗号資産パートナーとなり、Grey Cupの協賛とファン向け企画を実施しています。大規模な消費者コミュニティへ文化イベントを通じて接点を作る実績があります。',
+  },
+  {
+    organizationName: 'Crypto.com',
+    organizationWebsite: 'https://crypto.com',
+    sourceUrl: 'https://crypto.com/uk/company-news/cryptocom-and-uefa-announce-uefa-champions-league-partnership',
+    relationshipType: 'cash_sponsor',
+    reasonForFit: '現金スポンサー候補。Crypto.comはUEFA Champions Leagueの公式グローバルスポンサーとして、会場アクティベーション、放送連携、ファン体験を展開しています。世界的な消費者ブランド協賛とイベント投資の実績が明確です。',
+  },
+  {
+    organizationName: 'Uphold',
+    organizationWebsite: 'https://uphold.com',
+    sourceUrl: 'https://uphold.com/en-us/blog/company-news/uphold-partners-with-burnley-fc-as-official-sleeve-partner',
+    relationshipType: 'cash_sponsor',
+    reasonForFit: '現金スポンサー候補。UpholdはBurnley FCの公式スリーブパートナーとして、会場露出とシーズン中のアクティベーションを実施しました。消費者向けWeb3金融ブランドとしてコミュニティ協賛の実績があります。',
+  },
+  {
+    organizationName: 'Phantom',
+    organizationWebsite: 'https://phantom.com',
+    sourceUrl: 'https://phantom.com/learn/blog/phantom-acquires-bitski',
+    relationshipType: 'cash_sponsor',
+    reasonForFit: '現金スポンサー候補。Phantomは数百万人規模の利用者を持つ消費者向け暗号資産ウォレットで、公式ページではブランド向けウォレット体験やパートナー連携の実績を示しています。Dogeファン向けオンボーディング企画との接続が具体的です。',
+  },
+  {
+    organizationName: 'BitPay',
+    organizationWebsite: 'https://www.bitpay.com',
+    sourceUrl: 'https://developer.bitpay.com/docs/marketing',
+    relationshipType: 'cash_sponsor',
+    reasonForFit: '現金スポンサー候補。BitPayは公式の加盟店向け資料で共同発表、ソーシャル施策、ブランド露出などのパートナーマーケティングを案内しています。DOGEを含む暗号資産決済をイベント体験へ組み込める事業上の接点があります。',
+  },
+  {
+    organizationName: 'Pudgy Penguins',
+    organizationWebsite: 'https://www.pudgypenguins.com',
+    sourceUrl: 'https://media.pudgypenguins.com/education-posts/who-are-pudgy-penguins',
+    relationshipType: 'activation_partner',
+    reasonForFit: '企画・アクティベーション協力候補。Pudgy Penguinsは公式ページでIPライセンス、ブランドコラボ、コミュニティイベントを担う専任パートナーシップ体制を説明しています。インターネット発のキャラクターIP同士で、物販や現地体験を共同制作できます。',
+  },
+  {
+    organizationName: 'Doodles',
+    organizationWebsite: 'https://www.doodles.app',
+    sourceUrl: 'https://www.doodles.app/',
+    relationshipType: 'activation_partner',
+    reasonForFit: '企画・アクティベーション協力候補。Doodlesは公式サイトで、デジタルコレクティブル、ライブ体験、ライフスタイル商品と、グローバルブランド向けの文化キャンペーン実績を紹介しています。共同コンテンツや東京での体験企画に具体性があります。',
+  },
+  {
+    organizationName: 'VeeFriends',
+    organizationWebsite: 'https://veefriends.com',
+    sourceUrl: 'https://veefriends.com/about/explore/veefriends-x-lee-enterprise',
+    relationshipType: 'activation_partner',
+    reasonForFit: '企画・アクティベーション協力候補。VeeFriendsはキャラクターIPを新聞、コミック、物販、イベントへ展開し、公式ページでも全米規模のコラボ実績を示しています。Dogeとのキャラクターコンテンツや限定商品を設計できます。',
+  },
+  {
+    organizationName: 'Funko',
+    organizationWebsite: 'https://funko.com',
+    sourceUrl: 'https://funko.com/funko-blog-home/funko-teams-with-warner-bros-for-all-new-digital-pop-nfts.html',
+    relationshipType: 'activation_partner',
+    reasonForFit: '企画・アクティベーション協力候補。Funkoは公式ページでキャラクターIPを使ったDigital Popと物理コレクティブルの連動企画を展開しています。公式Doge IPの限定商品やイベント連動コレクティブルという明確な協業案があります。',
+  },
+  {
+    organizationName: 'Mythical Games',
+    organizationWebsite: 'https://mythicalgames.com',
+    sourceUrl: 'https://mythicalgames.com/news/adidas-enters-the-digital-pitch-with-fifa-rivals',
+    relationshipType: 'activation_partner',
+    reasonForFit: '企画・アクティベーション協力候補。Mythical Gamesは公式発表でadidasをFIFA Rivalsへ組み込み、限定デジタルアイテムやゲーム内施設を共同制作しています。Doge IPを使ったゲーム内企画とイベント連動の実行力があります。',
+  },
+  {
+    organizationName: 'Decrypt',
+    organizationWebsite: 'https://decrypt.co',
+    sourceUrl: 'https://decrypt.co/about-us',
+    relationshipType: 'media_partner',
+    reasonForFit: 'メディア提携候補（現金スポンサー候補ではありません）。Decryptは暗号資産とテクノロジーを扱う独立系メディアで、公式ページにパートナーシップ窓口があります。DOGE DAYの現地取材、企画記事、共同コンテンツの相談先として適切です。',
+  },
+]
+
 const BLOCKED_DOMAINS = new Set([
   'bing.com',
   'duckduckgo.com',
@@ -130,6 +242,12 @@ const BLOCKED_DOMAINS = new Set([
   'youtube.com',
   'wikipedia.org',
   'crunchbase.com',
+  'clutch.co',
+  'themanifest.com',
+  'designrush.com',
+  'goodfirms.co',
+  'g2.com',
+  'capterra.com',
   'glassdoor.com',
   'indeed.com',
   'collegefactual.com',
@@ -189,6 +307,12 @@ const BLOCKED_RESULT_TERMS = [
   'us digital service',
   'department of government efficiency',
   'federal government',
+  'business services directory',
+  'company directory',
+  'review platform',
+  'top companies',
+  'best agencies',
+  'agency rankings',
 ]
 
 export async function POST(request: NextRequest) {
@@ -869,7 +993,7 @@ function dogeDayRelationshipType(
   const text = `${result.title || ''} ${result.description || ''} ${domain}`.toLowerCase()
   if (campaign.excludedDomains.some((excluded) => domain === excluded || domain.endsWith(`.${excluded}`))) return 'reject'
   if (campaign.excludedTerms.some((term) => text.includes(term))) return 'reject'
-  if (/sports business journal|sports betting|gambling|casino|igaming|bookmaker|cybersecurity|email security|consulting firm|marketing agency/.test(text)) return 'reject'
+  if (/sports business journal|sports betting|gambling|casino|igaming|bookmaker|cybersecurity|email security|consulting firm|marketing agency|business directory|company directory|review platform|agency rankings?|top companies|best agencies|clutch\.co|themanifest\.com|designrush|goodfirms|capterra|g2\.com/.test(text)) return 'reject'
 
   const isPrimaryCryptoMedia = /crypto (?:news|media)|web3 (?:news|media)|blockchain (?:news|media)|digital asset (?:news|media)|decrypt\.co|coindesk|cointelegraph|blockworks/.test(text)
   const isMedia = /\bmedia\b|news(?:room)?|journal(?:ism)?|editorial|publisher|magazine|press outlet|reporter/.test(text)
@@ -899,6 +1023,7 @@ function dogeDayCandidateScore(result: BraveResult, campaign: LeadCampaign = DOG
   if (/brand partnership|partnerships?|sponsor|sponsorship|brand activation|collaboration|community|event marketing/.test(text)) score += 3
   if (/japan|apac|asia|global|united states|\busa\b/.test(text)) score += 1
   if (/cybersecurity|email security|threat protection|fraud detection|identity security|enterprise security|proofpoint/.test(text)) score -= 10
+  if (/business directory|company directory|review platform|agency rankings?|top companies|best agencies|clutch\.co|themanifest\.com|designrush|goodfirms|capterra|g2\.com/.test(text)) score -= 20
   if (/careers?|jobs?|documentation|developer docs|support portal|help center/.test(text)) score -= 4
   return score
 }
@@ -917,6 +1042,15 @@ async function scoreLeads(
     .filter((result) => !matchesExcludedClient(result, excludedTerms))
     .filter((result) => isCampaignResultEligible(result, campaign))
     .sort((a, b) => searchResultScore(b, campaign) - searchResultScore(a, campaign))
+
+  if (campaign.id === 'dogeday_2026_sponsorship') {
+    return mergeDogeDayCampaignLeads(
+      dogeDayCampaignLeads(input, campaign),
+      dogeDayFallbackLeads(usableResults, input, campaign),
+      input.maxLeads ?? 14,
+    )
+  }
+
   if (usableResults.length === 0) return []
 
   if (!keys.anthropicApiKey) {
@@ -1048,6 +1182,42 @@ function dogeDayFallbackLeads(
   })
 
   return dedupeLeadsByOrganization(leads).slice(0, input.maxLeads ?? 14)
+}
+
+function dogeDayCampaignLeads(input: LeadDiscoveryInput, campaign: LeadCampaign) {
+  const excludedTerms = [...new Set([...extractExcludedClientTerms(input), ...campaign.excludedTerms])]
+  return DOGEDAY_SPONSOR_ACCOUNTS
+    .map((account, index): Lead => ({
+      id: `dogeday_account_${canonicalOrganizationDomain(account.organizationWebsite).replace(/[^a-z0-9]+/g, '_')}`,
+      organizationName: account.organizationName,
+      organizationWebsite: account.organizationWebsite,
+      category: account.relationshipType === 'media_partner'
+        ? 'crypto media'
+        : account.relationshipType === 'activation_partner'
+          ? 'brand activation partner'
+          : 'consumer crypto sponsor',
+      country: input.targetMarket,
+      reasonForFit: account.reasonForFit,
+      sourceUrl: account.sourceUrl,
+      confidence: clampConfidence(0.98 - index * 0.005),
+      status: 'found',
+      relationshipType: account.relationshipType,
+    }))
+    .filter((lead) => !matchesExcludedLead(lead, excludedTerms))
+    .filter((lead) => !isBlockedDomain(extractDomain(lead.organizationWebsite)))
+}
+
+function mergeDogeDayCampaignLeads(curated: Lead[], discovered: Lead[], requested: number) {
+  const limit = Math.min(Math.max(requested, 1), 14)
+  const merged = dedupeLeadsByOrganization([...curated, ...discovered])
+  let mediaPartners = 0
+  return merged
+    .filter((lead) => {
+      if (lead.relationshipType !== 'media_partner') return true
+      mediaPartners += 1
+      return mediaPartners <= 1
+    })
+    .slice(0, limit)
 }
 
 function extractExcludedClientTerms(input: LeadDiscoveryInput) {
@@ -1463,11 +1633,13 @@ function prioritizeActionableLeads(
     }, input.targetMarket))
     .filter((lead) => !matchesExcludedLead(lead, excludedTerms))
     .filter((lead) => lead.confidence >= campaign.minConfidence)
-    .filter((lead) => isCampaignResultEligible({
-      title: lead.organizationName,
-      description: lead.reasonForFit,
-      url: lead.sourceUrl || lead.organizationWebsite,
-    }, campaign)))
+    .filter((lead) => campaign.id === 'dogeday_2026_sponsorship'
+      ? Boolean(lead.relationshipType)
+      : isCampaignResultEligible({
+          title: lead.organizationName,
+          description: lead.reasonForFit,
+          url: lead.sourceUrl || lead.organizationWebsite,
+        }, campaign)))
 
   const sorted = usable
     .sort((a, b) => {
