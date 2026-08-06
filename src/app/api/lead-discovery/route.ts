@@ -1043,13 +1043,15 @@ async function scoreLeads(
     .filter((result) => isCampaignResultEligible(result, campaign))
     .sort((a, b) => searchResultScore(b, campaign) - searchResultScore(a, campaign))
 
-  if (campaign.id === 'dogeday_2026_sponsorship') {
-    return mergeDogeDayCampaignLeads(
+  const preparedDogeDayLeads = campaign.id === 'dogeday_2026_sponsorship'
+    ? mergeDogeDayCampaignLeads(
       dogeDayCampaignLeads(input, campaign),
       dogeDayFallbackLeads(usableResults, input, campaign),
       input.maxLeads ?? 14,
     )
-  }
+    : null
+
+  if (preparedDogeDayLeads) return preparedDogeDayLeads
 
   if (usableResults.length === 0) return []
 
