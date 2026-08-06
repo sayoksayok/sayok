@@ -288,7 +288,7 @@ export default function SalesAgent({ userId, userEmail, userName, initialProfile
         setResult(currentLeadQuality ? saved.result || null : null)
         const currentBulkTemplate = saved.bulkTemplateVersion === BULK_TEMPLATE_VERSION
         setDrafts(currentLeadQuality && currentBulkTemplate
-          ? Object.fromEntries(Object.entries(saved.drafts || {}).map(([leadId, draft]) => [leadId, draft]))
+          ? Object.fromEntries(Object.entries(saved.drafts || {}).map(([leadId, draft]) => [leadId, normalizeDraftForUser(draft, userEmail)]))
           : {})
         setBulkTemplate(currentBulkTemplate
           ? { ...defaultBulkTemplate, ...saved.bulkTemplate }
@@ -650,7 +650,7 @@ export default function SalesAgent({ userId, userEmail, userName, initialProfile
       if (!response.ok) throw new Error(data.error || '文面を作成できませんでした。')
       setDrafts((current) => ({
         ...current,
-        [item.lead.id]: { ...data.draft, state: 'ready' },
+        [item.lead.id]: normalizeDraftForUser({ ...data.draft, state: 'ready' }, userEmail),
       }))
     } catch (err) {
       setError(err instanceof Error ? err.message : '文面を作成できませんでした。')
@@ -703,7 +703,8 @@ export default function SalesAgent({ userId, userEmail, userName, initialProfile
       return message
     }
 
-    const fullBody = `${prepareSalesBody(draft.body, profile)}\n\n${buildFooter(profile)}`
+    const normalizedDraft = normalizeDraftForUser(draft, userEmail)
+    const fullBody = `${prepareSalesBody(normalizedDraft.body, profile)}\n\n${buildFooter(profile)}`
     setDrafts((current) => ({
       ...current,
       [item.lead.id]: { ...draft, state: 'sending' },
@@ -1879,7 +1880,7 @@ function profileForUser(email: string, userName: string, initialProfile?: Partia
   const yudai = normalizedEmail === 'yudai@looq.icu'
   const defaults: SenderProfile = {
     ...emptyProfile,
-    senderName: userName || (yudai ? '石田雄大' : ''),
+    senderName: dogeUser ? 'Yudai' : userName || (yudai ? '石田雄大' : ''),
     senderCompany: looqUser ? 'LOOQ Japan' : dogeUser ? 'Own The Doge' : '',
     senderAddress: yudai ? '〒150-0002 東京都渋谷区渋谷2-19-19 ワコー宮益坂ビル5階' : '',
     senderContact: normalizedEmail,
@@ -1906,7 +1907,24 @@ function mergeProfileDefaults(defaults: SenderProfile, saved?: Partial<SenderPro
   if (!merged.websiteUrl.trim()) merged.websiteUrl = defaults.websiteUrl
   if (!merged.salesDeckUrl.trim()) merged.salesDeckUrl = defaults.salesDeckUrl
   if (!merged.serviceNote.trim()) merged.serviceNote = defaults.serviceNote
+  if (defaults.senderContact.trim().toLowerCase() === 'dogejapan@ownthedoge.com') merged.senderName = 'Yudai'
   return merged
+}
+
+function normalizeDraftForUser(draft: Draft, email: string): Draft {
+  if (email.trim().toLowerCase() !== 'dogejapan@ownthedoge.com') return draft
+
+  const lines = draft.body
+    .replace(/\bYudai\s+I\.(?=\s|[,;:]|$)/g, 'Yudai')
+    .replace(/\bYudai\s+Ishida\b/g, 'Yudai')
+    .split('\n')
+  const firstContentLine = lines.findIndex((line) => line.trim().length > 0)
+  if (firstContentLine >= 0 && /ご担当者様|担当者様|御中/.test(lines[firstContentLine])) {
+    const companyMatch = lines[firstContentLine].match(/^Hi\s+(.+?)\s+(?:ご担当者様|担当者様|御中)/i)
+    lines[firstContentLine] = companyMatch ? `Hi ${companyMatch[1]} team,` : 'Hi team,'
+  }
+
+  return { ...draft, body: lines.join('\n') }
 }
 
 function bulkTemplateForUser(email: string) {

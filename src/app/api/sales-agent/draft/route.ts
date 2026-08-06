@@ -41,8 +41,13 @@ export async function POST(request: NextRequest) {
     }
     input.attachLooqDeck = input.attachLooqDeck === true && Boolean(auth.user.email?.toLowerCase().endsWith('@looq.icu'))
     const dogeDayCampaign = isDogeDayDraft(input, auth.user.email || '')
+    input.senderName = normalizeSenderName(input.senderName, dogeDayCampaign)
 
-    const fallback = withSalesCollateral(fallbackDraft(input, dogeDayCampaign), input, dogeDayCampaign)
+    const fallback = normalizeDraft(
+      withSalesCollateral(fallbackDraft(input, dogeDayCampaign), input, dogeDayCampaign),
+      input,
+      dogeDayCampaign,
+    )
     const apiKey = process.env.ANTHROPIC_API_KEY
     if (!apiKey) return NextResponse.json({ draft: fallback, source: 'fallback' })
 
@@ -77,6 +82,8 @@ Rules:
 - Include the service deck URL near the end only when one is provided.
 - State that LOOQ_pitchdeck_JP.pdf is attached only when attachment is enabled.
 - Do not include a signature or legal footer.
+- For English, start with exactly "Hi ${input.company} team," unless a verified person's name was supplied. Never mix Japanese honorifics such as ご担当者様 into an English email.
+- Refer to the sender as exactly "${input.senderName}". Do not abbreviate, expand, or add an initial to the name.
 - Avoid hype, flattery, and generic sales language.
 - Return only JSON: {"subject":"...","body":"..."}`
 
@@ -98,12 +105,43 @@ Rules:
 
     const data = (await response.json()) as { content?: Array<{ type?: string; text?: string }> }
     const raw = data.content?.find((item) => item.type === 'text')?.text || ''
-    const draft = withSalesCollateral(parseDraft(raw), input, dogeDayCampaign)
+    const draft = normalizeDraft(
+      withSalesCollateral(parseDraft(raw), input, dogeDayCampaign),
+      input,
+      dogeDayCampaign,
+    )
     if (!draft.body || !draft.subject) return NextResponse.json({ draft: fallback, source: 'fallback' })
     return NextResponse.json({ draft, source: 'anthropic' })
   } catch {
     return NextResponse.json({ error: '文面を作成できませんでした。' }, { status: 500 })
   }
+}
+
+function normalizeSenderName(value: string, dogeDayCampaign: boolean) {
+  const name = value.trim()
+  if (dogeDayCampaign && /^yudai(?:\s+[a-z]\.?)*$/i.test(name)) return 'Yudai'
+  return name
+}
+
+function normalizeDraft(draft: DraftResult, input: DraftInput, dogeDayCampaign: boolean): DraftResult {
+  if (!draft.body) return draft
+
+  let body = draft.body
+    .replace(/\bYudai\s+I\.(?=\s|[,;:]|$)/g, 'Yudai')
+    .replace(/\bYudai\s+Ishida\b/g, dogeDayCampaign ? 'Yudai' : 'Yudai Ishida')
+
+  if ((input.language || 'English') === 'English') {
+    const company = input.company.trim()
+    const lines = body.split('\n')
+    const firstContentLine = lines.findIndex((line) => line.trim().length > 0)
+    if (firstContentLine >= 0 && /ご担当者様|担当者様|御中/.test(lines[firstContentLine])) {
+      lines[firstContentLine] = `Hi ${company} team,`
+      body = lines.join('\n')
+    }
+    body = body.replace(/Hi\s+(.+?)\s+(?:ご担当者様|担当者様|御中)[,、]?/gi, 'Hi $1 team,')
+  }
+
+  return { ...draft, body }
 }
 
 function withSalesCollateral(draft: DraftResult, input: DraftInput, dogeDayCampaign = false): DraftResult {
