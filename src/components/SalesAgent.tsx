@@ -80,7 +80,7 @@ const STORAGE_KEY = 'sayok:sales-agent:v2'
 const LEGACY_PROFILE_KEY = 'sayok:sales-profile:v2'
 const PROFILE_KEY = 'sayok:sales-profile:v3'
 const BULK_CONFIRM_ID = '__bulk_send__'
-const BULK_TEMPLATE_VERSION = 5
+const BULK_TEMPLATE_VERSION = 6
 const LEAD_QUALITY_VERSION = 6
 const SALES_DECK_DRIVE_URL = 'https://drive.google.com/file/d/1p5NZiJnWU2CrnBmn2tb82iZbre7W0x9G/view?usp=sharing'
 const DOGEDAY_DECK_DRIVE_URL = 'https://drive.google.com/file/d/1_wuTyBDHFicPemao96BZ6k0w14mXD2IN/view?usp=sharing'
@@ -141,7 +141,8 @@ Previous DOGE DAY highlights:
 2024: ${DOGEDAY_2024_URL}
 2025: ${DOGEDAY_2025_URL}
 
-The partnership deck is linked below.`,
+DOGE DAY 2026 partnership deck:
+${DOGEDAY_DECK_DRIVE_URL}`,
 }
 
 const emptyProfile: SenderProfile = {
@@ -1191,10 +1192,16 @@ export default function SalesAgent({ userId, userEmail, userName, initialProfile
                         <Paperclip size={15} />
                         {profile.attachLooqDeck && userEmail.endsWith('@looq.icu')
                           ? 'LOOQ_pitchdeck_JP.pdfを全メールへ自動添付'
-                          : '営業資料URLを全メールの本文へ自動挿入'}
+                          : userEmail.trim().toLowerCase() === 'dogejapan@ownthedoge.com'
+                            ? 'DOGE DAY 2026 Deck URLを全メール本文へ自動挿入'
+                            : '営業資料URLを全メールの本文へ自動挿入'}
                       </span>
-                      <span className="flex flex-wrap gap-3">
-                        {profile.salesDeckUrl && <a href={normalizeUrl(profile.salesDeckUrl)} target="_blank" rel="noreferrer" className="underline">営業資料を確認</a>}
+                      <span className="flex min-w-0 flex-wrap items-center justify-end gap-3">
+                        {profile.salesDeckUrl && (
+                          <a href={normalizeUrl(profile.salesDeckUrl)} target="_blank" rel="noreferrer" className="max-w-full break-all underline">
+                            {userEmail.trim().toLowerCase() === 'dogejapan@ownthedoge.com' ? 'DOGE DAY 2026 Deckを確認' : '営業資料を確認'}
+                          </a>
+                        )}
                         {profile.attachLooqDeck && userEmail.endsWith('@looq.icu') && <a href="/sales-assets/LOOQ_pitchdeck_JP.pdf" target="_blank" rel="noreferrer" className="underline">添付PDFを確認</a>}
                       </span>
                     </div>
