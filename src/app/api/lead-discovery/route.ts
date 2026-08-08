@@ -70,7 +70,7 @@ type RuntimeKeys = {
 }
 
 type LeadCampaign = {
-  id: 'default' | 'dogeday_2026_sponsorship'
+  id: 'default' | 'dogeday_2026_sponsorship' | 'looq_verified_media'
   label: string
   brief: string
   minConfidence: number
@@ -83,6 +83,14 @@ type DogeDaySponsorAccount = {
   organizationWebsite: string
   sourceUrl: string
   relationshipType: LeadRelationshipType
+  reasonForFit: string
+}
+
+type LooqPilotAccount = {
+  organizationName: string
+  organizationWebsite: string
+  sourceUrl: string
+  category: string
   reasonForFit: string
 }
 
@@ -124,6 +132,15 @@ const DOGEDAY_CAMPAIGN: LeadCampaign = {
     'taschen.com',
     'ownthedoge.com',
   ],
+}
+
+const LOOQ_CAMPAIGN: LeadCampaign = {
+  id: 'looq_verified_media',
+  label: 'LOOQ Verified Media Quality Pilot',
+  minConfidence: 0.75,
+  brief: `LOOQ Japan offers a Verified Media Quality Pilot for Japanese DOOH media owners, digital-signage operators, OOH agencies, retail and venue operators, and physical-infrastructure partners. The pilot measures aggregate flow, dwell, stops, visibility opportunity, and response where instrumented. Reports state confidence, exclusions, and limitations. Processing is performed on site and does not create identity profiles. Only organizations that operate, sell, install, or measure physical media inventory are eligible. Reject unrelated marketing agencies, software directories, overseas companies without Japanese inventory, and generic businesses that merely mention advertising.`,
+  excludedTerms: [],
+  excludedDomains: [],
 }
 
 // Campaign account list based on the DOGE DAY deck and each organization's official
@@ -230,6 +247,111 @@ const DOGEDAY_SPONSOR_ACCOUNTS: DogeDaySponsorAccount[] = [
   },
 ]
 
+// These accounts are anchored to official pages describing owned media inventory,
+// signage operations, or DOOH measurement. The list keeps LOOQ discovery useful even
+// when a public search provider is slow, while contact emails still require a visible
+// source on the organization's own website.
+const LOOQ_PILOT_ACCOUNTS: LooqPilotAccount[] = [
+  {
+    organizationName: 'LIVE BOARD',
+    organizationWebsite: 'https://liveboard.co.jp/',
+    sourceUrl: 'https://liveboard.co.jp/',
+    category: 'DOOH media owner and measurement platform',
+    reasonForFit: '日本のDOOHネットワークを運営し、公式サイトでインプレッションや広告効果の可視化を案内しています。既存指標を置き換えるのではなく、現地での視認機会・滞留・停止を補足検証するパイロットを提案できます。',
+  },
+  {
+    organizationName: 'ジェイアール東日本企画（jeki）',
+    organizationWebsite: 'https://www.jeki.co.jp/',
+    sourceUrl: 'https://www.jeki.co.jp/transit_ad/',
+    category: 'transportation media and OOH agency',
+    reasonForFit: 'JR東日本の交通広告・デジタルサイネージを扱い、公式ページでもOOH広告効果を案内しています。駅・車内媒体の現場品質を集計し、媒体提案の根拠を補強する用途が明確です。',
+  },
+  {
+    organizationName: 'メトロアドエージェンシー',
+    organizationWebsite: 'https://www.metro-ad.co.jp/',
+    sourceUrl: 'https://www.metro-ad.co.jp/about/',
+    category: 'Tokyo Metro media owner and OOH agency',
+    reasonForFit: '東京メトロの交通メディアとデジタルサイネージを扱う媒体社です。駅ごとの流動・滞留・視認機会を現地計測し、掲出報告に測定条件と限界を加えるパイロットに適合します。',
+  },
+  {
+    organizationName: 'NKB',
+    organizationWebsite: 'https://www.nkb.co.jp/',
+    sourceUrl: 'https://www.nkb.co.jp/business/ooh/digital-signage/',
+    category: 'transportation OOH and digital-signage operator',
+    reasonForFit: '交通広告とデジタルサイネージの開発・運用を公式に展開しています。設置場所ごとの歩行者フロー、停止、滞留を独立した現地品質レポートとして検証する提案ができます。',
+  },
+  {
+    organizationName: 'JR東日本メディア',
+    organizationWebsite: 'https://www.jrmedia.co.jp/',
+    sourceUrl: 'https://www.jrmedia.co.jp/',
+    category: 'railway media operations company',
+    reasonForFit: 'デジタルサイネージ、駅看板、ポスターの施工・保守・安全管理を担う会社です。媒体設備の運用品質に、現場での視認機会と人流データを加える実証相手として適合します。',
+  },
+  {
+    organizationName: 'JR西日本コミュニケーションズ',
+    organizationWebsite: 'https://www.jcomm.co.jp/',
+    sourceUrl: 'https://www.jcomm.co.jp/',
+    category: 'railway OOH media company',
+    reasonForFit: '西日本の駅・交通OOHとデジタルサイネージを扱う媒体社です。インプレッション型DOOHの販売根拠を、現地の滞留・停止・視認可能性で補足するパイロットを提案できます。',
+  },
+  {
+    organizationName: 'ジェイアール東海エージェンシー',
+    organizationWebsite: 'https://www.jrta.co.jp/',
+    sourceUrl: 'https://www.jrta.co.jp/mediadiv/digital/',
+    category: 'railway digital-signage media operator',
+    reasonForFit: 'JR東海の駅・車両デジタルサイネージネットワークを公式に案内しています。主要駅の媒体品質を現地計測し、広告主向けの説明可能な検証レポートへつなげられます。',
+  },
+  {
+    organizationName: 'HIT',
+    organizationWebsite: 'https://www.hit-ad.co.jp/',
+    sourceUrl: 'https://www.hit-ad.co.jp/hit-dsp.html',
+    category: 'outdoor advertising and DOOH platform operator',
+    reasonForFit: '屋外広告媒体とDOOH配信基盤を運営しています。配信ログに加えて実際の設置環境における流量・滞留・視認機会を検証することで、媒体価値の説明を補強できます。',
+  },
+  {
+    organizationName: 'DNP（BookAD DOOH）',
+    organizationWebsite: 'https://www.dnp.co.jp/',
+    sourceUrl: 'https://www.dnp.co.jp/biz/products/detail/20172554_4986.html',
+    category: 'DOOH planning and delivery platform',
+    reasonForFit: '公式ページでDOOHのプランニング・配信と効果測定課題への対応を案内しています。媒体横断の配信データへ、現地で確認した品質指標と測定上の限界を追加する共同検証が可能です。',
+  },
+  {
+    organizationName: 'GENIEE DOOH',
+    organizationWebsite: 'https://geniee.co.jp/',
+    sourceUrl: 'https://geniee.co.jp/products/dooh/',
+    category: 'programmatic DOOH platform',
+    reasonForFit: 'DOOH広告の配信・運用プラットフォームを展開しています。プログラマティック配信の実績に、現地の視認機会・停止・滞留を結び付ける検証パイロットと相性があります。',
+  },
+  {
+    organizationName: '日本自動ドア（JAD Digital Signage）',
+    organizationWebsite: 'https://www.jad.co.jp/',
+    sourceUrl: 'https://www.jad.co.jp/dooh/',
+    category: 'venue digital-signage and infrastructure operator',
+    reasonForFit: '自動ドア周辺の設置場所を活用したデジタルサイネージ事業を展開しています。物理インフラに近い媒体の通行量・停止・滞留を現地処理で測る実証先として具体性があります。',
+  },
+  {
+    organizationName: 'SHIBUYA109エンタテイメント',
+    organizationWebsite: 'https://www.shibuya109.co.jp/',
+    sourceUrl: 'https://www.shibuya109.co.jp/service-entertainment/',
+    category: 'retail venue and entertainment media operator',
+    reasonForFit: '施設内外の広告媒体、イベントスペース、デジタル施策を運営しています。来館者の個人識別を行わず、媒体周辺の集計フローと滞留を測る会場パイロットに適合します。',
+  },
+  {
+    organizationName: 'NKB Y’s',
+    organizationWebsite: 'https://www.nkb-ys.co.jp/',
+    sourceUrl: 'https://www.nkb-ys.co.jp/company/',
+    category: 'station advertising and signage operator',
+    reasonForFit: '駅広告の管理とサイネージ設置・運用を担っています。掲出・保守の実務に、場所別の視認機会と滞留を示す測定レポートを加える提案ができます。',
+  },
+  {
+    organizationName: 'TBグループ（Share Time Vision）',
+    organizationWebsite: 'https://www.tb-group.co.jp/',
+    sourceUrl: 'https://www.tb-group.co.jp/assets/pdf/news_pr/20230209_share_time_vision.pdf',
+    category: 'outdoor digital-signage network operator',
+    reasonForFit: '公式資料で屋外デジタルサイネージを活用したDOOH広告事業を案内しています。設置面のシェア型運用に対し、地点ごとの流量・停止・滞留を検証するパイロットを提案できます。',
+  },
+]
+
 const BLOCKED_DOMAINS = new Set([
   'bing.com',
   'duckduckgo.com',
@@ -333,13 +455,22 @@ export async function POST(request: NextRequest) {
   const runId = await createLeadRun(input, context)
 
   try {
-    const website = await scrapeWebsite(input.websiteUrl, keys)
-    const analysis = await analyzeWebsite(input, website, keys, campaign)
+    const isLooqCampaign = campaign.id === 'looq_verified_media'
+    const website = isLooqCampaign
+      ? { title: 'LOOQ Japan', content: campaign.brief }
+      : await scrapeWebsite(input.websiteUrl, keys)
+    const analysis = isLooqCampaign
+      ? buildBasicAnalysis(input, website, campaign)
+      : await analyzeWebsite(input, website, keys, campaign)
     const searchQueries = expandSearchQueries(input, analysis.searchQueries, campaign)
-    const braveResults = await searchBrave(searchQueries, input.maxLeads ?? 14, input.targetMarket, keys, campaign)
+    const braveResults = isLooqCampaign
+      ? []
+      : await searchBrave(searchQueries, input.maxLeads ?? 14, input.targetMarket, keys, campaign)
     const leads = await scoreLeads(input, analysis, braveResults, keys, campaign)
     const { contacts, warnings: hunterWarnings } = await discoverContacts(leads, keys, campaign)
-    const { contacts: apolloContacts, warning: apolloWarning } = await discoverApolloContacts(leads, keys)
+    const { contacts: apolloContacts, warning: apolloWarning } = isLooqCampaign
+      ? { contacts: [] as Contact[], warning: '' }
+      : await discoverApolloContacts(leads, keys)
     const mergedContacts = prioritizeContacts(mergeContacts([...contacts, ...apolloContacts]), campaign)
     const leadsWithStatus = applyLeadStatuses(leads, mergedContacts)
     const outreach = await generateOutreach(input, analysis, website, leadsWithStatus, mergedContacts, keys)
@@ -366,8 +497,8 @@ export async function POST(request: NextRequest) {
       outreach,
       integrationStatus: {
         firecrawl: keys.firecrawlApiKey ? 'connected' : 'direct_fetch',
-        brave: keys.braveSearchApiKey ? 'connected' : 'public_search',
-        hunter: keys.hunterApiKey ? 'connected' : 'public_email_extract',
+        brave: isLooqCampaign ? 'prepared_official_sources' : keys.braveSearchApiKey ? 'connected' : 'public_search',
+        hunter: isLooqCampaign ? 'public_email_extract' : keys.hunterApiKey ? 'connected' : 'public_email_extract',
         apollo: keys.apolloApiKey ? (apolloWarning ? 'attempted_with_warning' : 'connected') : 'not_configured_optional',
         llm: keys.anthropicApiKey ? 'connected' : 'qualification_unavailable',
       },
@@ -401,6 +532,10 @@ export async function POST(request: NextRequest) {
 function resolveLeadCampaign(input: LeadDiscoveryInput, userEmail: string): LeadCampaign {
   const identity = `${userEmail} ${input.websiteUrl} ${input.senderProfile || ''}`.toLowerCase()
   const goal = input.goal.toLowerCase()
+  const isLooq = userEmail.trim().toLowerCase().endsWith('@looq.icu')
+    || /\blooq\b|looq\.jp|looq\.icu/.test(identity)
+  if (isLooq) return LOOQ_CAMPAIGN
+
   const isOwnTheDoge = userEmail.trim().toLowerCase() === 'dogejapan@ownthedoge.com'
     || /own\s*the\s*doge|ownthedoge\.com/.test(identity)
   const isDogeDaySponsorship = /doge\s*day|dogeday/.test(goal)
@@ -409,7 +544,13 @@ function resolveLeadCampaign(input: LeadDiscoveryInput, userEmail: string): Lead
 }
 
 function campaignWarnings(campaign: LeadCampaign, found: number, requested: number) {
-  if (campaign.id !== 'dogeday_2026_sponsorship' || found >= requested) return []
+  if (found >= requested) return []
+  if (campaign.id === 'looq_verified_media') {
+    return found === 0
+      ? ['LOOQ pilot discovery could not load the prepared official-source account list.']
+      : [`LOOQ pilot discovery returned ${found} official-source accounts. Unrelated companies were not used to pad the list to ${requested}.`]
+  }
+  if (campaign.id !== 'dogeday_2026_sponsorship') return []
   if (found === 0) {
     return ['DOGE DAY sponsor search found no candidates that met the campaign quality threshold. Weak or unrelated results were not shown.']
   }
@@ -584,6 +725,15 @@ function buildBasicAnalysis(
       positioning: campaign.brief,
       businessModel: 'Event sponsorship and brand collaboration',
       searchQueries: dogeDaySearchQueries(target),
+    }
+  }
+  if (campaign.id === 'looq_verified_media') {
+    return {
+      product: 'LOOQ Verified Media Quality Pilot',
+      targetAudience: 'Japanese DOOH media owners, digital-signage operators, OOH agencies, retail and venue operators, and physical-infrastructure partners',
+      positioning: campaign.brief,
+      businessModel: 'Paid field-measurement pilot and media-quality reporting',
+      searchQueries: [],
     }
   }
   const base = `${website.title || input.websiteUrl} ${goal} ${target}`
@@ -970,6 +1120,7 @@ function isBlockedResult(result: BraveResult) {
 function searchResultScore(result: BraveResult, campaign: LeadCampaign = DEFAULT_CAMPAIGN) {
   const text = `${result.title || ''} ${result.description || ''} ${result.url || ''}`.toLowerCase()
   if (campaign.id === 'dogeday_2026_sponsorship') return dogeDayCandidateScore(result, campaign)
+  if (campaign.id === 'looq_verified_media') return looqCandidateScore(result)
   let score = 0
   if (/\.edu\b|university|college|department|language program|japanese club|student association/.test(text)) score += 6
   if (/japan america society|japan-america society|japanese cultural|cultural center|teachers association/.test(text)) score += 5
@@ -982,7 +1133,19 @@ function searchResultScore(result: BraveResult, campaign: LeadCampaign = DEFAULT
 
 function isCampaignResultEligible(result: BraveResult, campaign: LeadCampaign) {
   if (campaign.id === 'default') return true
+  if (campaign.id === 'looq_verified_media') return looqCandidateScore(result) >= 5
   return dogeDayRelationshipType(result, campaign) !== 'reject' && dogeDayCandidateScore(result, campaign) >= 4
+}
+
+function looqCandidateScore(result: BraveResult) {
+  const text = `${result.title || ''} ${result.description || ''} ${result.url || ''}`.toLowerCase()
+  let score = 0
+  if (/dooh|ooh|digital[- ]?signage|デジタルサイネージ|屋外広告|交通広告|駅広告/.test(text)) score += 6
+  if (/media owner|媒体|鉄道|station|railway|retail|venue|facility|施設|広告媒体/.test(text)) score += 3
+  if (/measurement|効果測定|impression|人流|視認|滞留|広告効果/.test(text)) score += 2
+  if (/japan|tokyo|日本|東京|株式会社/.test(text) || /\.jp(?:\/|$)/.test(text)) score += 2
+  if (/directory|ranking|review|求人|採用|スクール|英会話|介護|bathroom/.test(text)) score -= 12
+  return score
 }
 
 function dogeDayRelationshipType(
@@ -1035,6 +1198,10 @@ async function scoreLeads(
   keys: RuntimeKeys,
   campaign: LeadCampaign = DEFAULT_CAMPAIGN,
 ): Promise<Lead[]> {
+  if (campaign.id === 'looq_verified_media') {
+    return looqCampaignLeads(input).slice(0, Math.min(input.maxLeads ?? 14, 14))
+  }
+
   const excludedTerms = [...new Set([...extractExcludedClientTerms(input), ...campaign.excludedTerms])]
   const usableResults = results
     .filter((result) => !isBlockedResult(result) && !isBlockedDomain(extractDomain(result.url || '')))
@@ -1209,6 +1376,24 @@ function dogeDayCampaignLeads(input: LeadDiscoveryInput, campaign: LeadCampaign)
     .filter((lead) => !isBlockedDomain(extractDomain(lead.organizationWebsite)))
 }
 
+function looqCampaignLeads(input: LeadDiscoveryInput) {
+  const excludedTerms = extractExcludedClientTerms(input)
+  return LOOQ_PILOT_ACCOUNTS
+    .map((account, index): Lead => ({
+      id: `looq_account_${canonicalOrganizationDomain(account.organizationWebsite).replace(/[^a-z0-9]+/g, '_')}`,
+      organizationName: account.organizationName,
+      organizationWebsite: account.organizationWebsite,
+      category: account.category,
+      country: 'Japan',
+      reasonForFit: account.reasonForFit,
+      sourceUrl: account.sourceUrl,
+      confidence: clampConfidence(0.98 - index * 0.008),
+      status: 'found',
+    }))
+    .filter((lead) => !matchesExcludedLead(lead, excludedTerms))
+    .filter((lead) => !isBlockedDomain(extractDomain(lead.organizationWebsite)))
+}
+
 function mergeDogeDayCampaignLeads(curated: Lead[], discovered: Lead[], requested: number) {
   const limit = Math.min(Math.max(requested, 1), 14)
   const merged = dedupeLeadsByOrganization([...curated, ...discovered])
@@ -1308,6 +1493,7 @@ function dedupeLeadsByOrganization(leads: Lead[]) {
 }
 
 async function discoverContacts(leads: Lead[], keys: RuntimeKeys, campaign: LeadCampaign = DEFAULT_CAMPAIGN) {
+  if (campaign.id === 'looq_verified_media') return discoverPublicContacts(leads, campaign)
   if (!keys.hunterApiKey) return discoverPublicContacts(leads, campaign)
 
   const contacts: Contact[] = []
@@ -1352,14 +1538,12 @@ async function discoverContacts(leads: Lead[], keys: RuntimeKeys, campaign: Lead
 }
 
 async function discoverPublicContacts(leads: Lead[], campaign: LeadCampaign = DEFAULT_CAMPAIGN) {
-  const contacts: Contact[] = []
   const warnings: string[] = []
+  const limit = campaign.id === 'looq_verified_media' ? 14 : 8
 
-  for (const lead of leads.slice(0, 8)) {
+  const contactGroups = await Promise.all(leads.slice(0, limit).map(async (lead) => {
     const pages = contactPageUrls(lead.organizationWebsite, lead.sourceUrl)
-    const found = new Map<string, { sourceUrl: string; verified: boolean }>()
-
-    for (const pageUrl of pages) {
+    const pageResults = await Promise.all(pages.map(async (pageUrl) => {
       try {
         const response = await fetchWithTimeout(pageUrl, {
           redirect: 'follow',
@@ -1368,18 +1552,22 @@ async function discoverPublicContacts(leads: Lead[], campaign: LeadCampaign = DE
             'User-Agent': 'SayOKLeadDiscovery/1.0',
           },
         }, 5000)
-        if (!response.ok) continue
+        if (!response.ok) return [] as { email: string; sourceUrl: string }[]
         const text = await response.text()
-        for (const email of extractEmails(text)) {
-          if (isBlockedEmail(email)) continue
-          if (!found.has(email)) found.set(email, { sourceUrl: response.url || pageUrl, verified: false })
-        }
+        return extractEmails(text)
+          .filter((email) => !isBlockedEmail(email))
+          .map((email) => ({ email, sourceUrl: response.url || pageUrl }))
       } catch {
-        continue
+        return [] as { email: string; sourceUrl: string }[]
       }
+    }))
+
+    const found = new Map<string, string>()
+    for (const row of pageResults.flat()) {
+      if (!found.has(row.email)) found.set(row.email, row.sourceUrl)
     }
 
-    for (const [email, meta] of found) {
+    const leadContacts = await Promise.all([...found.entries()].slice(0, 6).map(async ([email, sourceUrl]) => {
       const verified = await hasMxRecord(email)
       const contact: Contact = {
         id: crypto.randomUUID(),
@@ -1389,14 +1577,16 @@ async function discoverPublicContacts(leads: Lead[], campaign: LeadCampaign = DE
         email,
         emailStatus: verified ? 'verified' : 'found',
         linkedinUrl: '',
-        sourceUrl: meta.sourceUrl,
+        sourceUrl,
         confidence: verified ? 0.75 : 0.55,
       }
-      if (isCampaignContactEligible(contact, campaign)) contacts.push(contact)
-    }
-  }
+      return isCampaignContactEligible(contact, campaign) ? contact : null
+    }))
 
-  return { contacts, warnings }
+    return leadContacts.filter((contact): contact is Contact => Boolean(contact))
+  }))
+
+  return { contacts: contactGroups.flat(), warnings }
 }
 
 function contactPageUrls(homepage: string, sourceUrl?: string) {
@@ -1408,7 +1598,10 @@ function contactPageUrls(homepage: string, sourceUrl?: string) {
       sourceUrl || '',
       `${origin}/contact`,
       `${origin}/contact-us`,
+      `${origin}/inquiry`,
       `${origin}/about`,
+      `${origin}/company`,
+      `${origin}/corporate/contact`,
       `${origin}/privacy`,
       `${origin}/privacy-policy`,
       `${origin}/privacypolicy`,

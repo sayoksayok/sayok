@@ -131,7 +131,7 @@ function normalizeDraft(draft: DraftResult, input: DraftInput, dogeDayCampaign: 
     .replace(/\bYudai\s+Ishida\b/g, dogeDayCampaign ? 'Yudai' : 'Yudai Ishida')
 
   if ((input.language || 'English') === 'English') {
-    const company = input.company.trim()
+    const company = input.company?.trim() || 'there'
     const lines = body.split('\n')
     const firstContentLine = lines.findIndex((line) => line.trim().length > 0)
     if (firstContentLine >= 0 && /ご担当者様|担当者様|御中/.test(lines[firstContentLine])) {

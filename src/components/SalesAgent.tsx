@@ -81,7 +81,7 @@ const LEGACY_PROFILE_KEY = 'sayok:sales-profile:v2'
 const PROFILE_KEY = 'sayok:sales-profile:v3'
 const BULK_CONFIRM_ID = '__bulk_send__'
 const BULK_TEMPLATE_VERSION = 6
-const LEAD_QUALITY_VERSION = 6
+const LEAD_QUALITY_VERSION = 7
 const SALES_DECK_DRIVE_URL = 'https://drive.google.com/file/d/1p5NZiJnWU2CrnBmn2tb82iZbre7W0x9G/view?usp=sharing'
 const DOGEDAY_DECK_DRIVE_URL = 'https://drive.google.com/file/d/1_wuTyBDHFicPemao96BZ6k0w14mXD2IN/view?usp=sharing'
 const DOGEDAY_2023_URL = 'https://youtu.be/4-Xrxocl904?si=e6G5Y1TmzM7nX03n'
@@ -476,10 +476,16 @@ export default function SalesAgent({ userId, userEmail, userName, initialProfile
     setBusy('search')
     setError('')
     setNotice('')
+    setResult(null)
+    setDrafts({})
+    setExcludedIds([])
+    const controller = new AbortController()
+    const timeoutId = window.setTimeout(() => controller.abort(), 90_000)
     try {
       const response = await apiFetch('/api/lead-discovery', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
         body: JSON.stringify({
           websiteUrl: normalizeUrl(siteUrl),
           targetMarket: targetMarket.trim(),
@@ -502,8 +508,11 @@ export default function SalesAgent({ userId, userEmail, userName, initialProfile
         ? '検索が完了しました。出典を確認できる連絡先だけを送信候補にしています。'
         : '条件に合う営業先を確認できませんでした。関係ない候補で件数を穴埋めはしていません。条件を変えて再検索してください。')
     } catch (err) {
-      setError(err instanceof Error ? err.message : '見込み客を探せませんでした。')
+      setError(err instanceof DOMException && err.name === 'AbortError'
+        ? '検索が90秒以内に完了しませんでした。処理を停止したので、もう一度お試しください。'
+        : err instanceof Error ? err.message : '見込み客を探せませんでした。')
     } finally {
+      window.clearTimeout(timeoutId)
       setBusy('')
     }
   }
@@ -1000,7 +1009,7 @@ export default function SalesAgent({ userId, userEmail, userName, initialProfile
                   <div className="md:col-span-2">
                     <PrimaryButton onClick={findLeads} disabled={busy === 'search'}>
                       <Search size={17} />
-                      {busy === 'search' ? '検索・出典確認中…（最大2分）' : result ? '条件を変えて再検索' : '探索を開始'}
+                      {busy === 'search' ? '公式サイトと連絡先を確認中…' : result ? '条件を変えて再検索' : '探索を開始'}
                     </PrimaryButton>
                   </div>
                 </div>
@@ -1027,6 +1036,23 @@ export default function SalesAgent({ userId, userEmail, userName, initialProfile
                     </div>
                   </div>
                 </details>
+
+                {busy === 'search' && (
+                  <div className="mt-8 min-h-48 rounded-lg border border-[#b8c6da] bg-[#f3f6fa] p-6" aria-live="polite">
+                    <div className="flex items-center gap-3">
+                      <RefreshCw size={20} className="animate-spin text-[#2b4c7e]" />
+                      <div>
+                        <p className="font-black text-[#1d2f4c]">14社の公式情報を確認しています</p>
+                        <p className="mt-1 text-sm font-semibold text-[#667080]">検索中の空リストは表示しません。完了した結果だけをここに出します。</p>
+                      </div>
+                    </div>
+                    <div className="mt-5 grid gap-2 text-sm font-bold text-[#4f5c70] sm:grid-cols-3">
+                      <p className="rounded-md bg-white px-4 py-3">1. 対象事業との適合を確認</p>
+                      <p className="rounded-md bg-white px-4 py-3">2. 公式ページの出典を確認</p>
+                      <p className="rounded-md bg-white px-4 py-3">3. 公開連絡先だけを抽出</p>
+                    </div>
+                  </div>
+                )}
 
                 {result && (
                   <div className="mt-8">
