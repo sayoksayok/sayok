@@ -150,6 +150,7 @@ export default function SalesAgentGate() {
         scopes: [
           'email',
           'profile',
+          'https://www.googleapis.com/auth/gmail.readonly',
           'https://www.googleapis.com/auth/gmail.send',
         ].join(' '),
         queryParams: {
