@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { decryptToken, encryptToken } from '@/lib/work-os-server'
 
 export type SalesAgentGoogleConnection = {
+  id?: string
   workspace_id: string
   user_id: string
   google_email: string
@@ -11,6 +12,8 @@ export type SalesAgentGoogleConnection = {
   scopes: string[]
   status: 'connected' | 'needs_reauth' | 'revoked' | 'error'
   last_error: string | null
+  daily_send_limit?: number
+  connection_source?: 'sales_agent_google_accounts' | 'work_os_google_connections'
 }
 
 const googleClientId = process.env.GOOGLE_CLIENT_ID || ''
@@ -47,11 +50,11 @@ export async function getValidSalesAgentAccessToken(
     error_description?: string
   }
   if (!response.ok || !data.access_token) {
-    await admin.from('work_os_google_connections').update({
+    await updateConnection(admin, connection, {
       status: 'needs_reauth',
       last_error: data.error_description || 'Google token refresh failed',
       updated_at: new Date().toISOString(),
-    }).eq('workspace_id', connection.workspace_id).eq('user_id', connection.user_id)
+    })
     throw new Error('Gmailの認証期限が切れました。再接続してください。')
   }
 
@@ -61,18 +64,37 @@ export async function getValidSalesAgentAccessToken(
   }
 
   const tokenExpiresAt = new Date(Date.now() + (data.expires_in || 3600) * 1000).toISOString()
-  const { error } = await admin.from('work_os_google_connections').update({
+  const update = {
     encrypted_access_token: encryptToken(data.access_token),
     token_expires_at: tokenExpiresAt,
     scopes,
-    gmail_connected: true,
     status: 'connected',
     last_error: null,
     updated_at: new Date().toISOString(),
-  }).eq('workspace_id', connection.workspace_id).eq('user_id', connection.user_id)
-  if (error) throw new Error(error.message)
+  }
+  await updateConnection(admin, connection, connection.connection_source === 'sales_agent_google_accounts'
+    ? update
+    : { ...update, gmail_connected: true })
 
   return data.access_token
+}
+
+async function updateConnection(
+  admin: SupabaseClient,
+  connection: SalesAgentGoogleConnection,
+  values: Record<string, unknown>,
+) {
+  const table = connection.connection_source === 'sales_agent_google_accounts'
+    ? 'sales_agent_google_accounts'
+    : 'work_os_google_connections'
+  let query = admin.from(table).update(values)
+    .eq('workspace_id', connection.workspace_id)
+    .eq('user_id', connection.user_id)
+  if (table === 'sales_agent_google_accounts') {
+    query = query.eq('google_email', connection.google_email)
+  }
+  const { error } = await query
+  if (error) throw new Error(error.message)
 }
 
 export async function sendSalesEmail(

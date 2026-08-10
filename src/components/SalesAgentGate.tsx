@@ -3,7 +3,12 @@
 import type { Session, User } from '@supabase/supabase-js'
 import { LockKeyhole, Mail, ShieldCheck } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
-import SalesAgent, { type SenderProfile } from '@/components/SalesAgent'
+import SalesAgent, {
+  type ConnectedGoogleAccountStatus,
+  type ProductSenderStatus,
+  type SenderProfile,
+  type SenderSettingsInput,
+} from '@/components/SalesAgent'
 import { checkAuthHealth, getAuthCallbackUrl, supabase } from '@/lib/supabase'
 
 type GmailStatus = {
@@ -11,6 +16,8 @@ type GmailStatus = {
   canSend: boolean
   googleEmail: string | null
   needsReauth?: boolean
+  accounts: ConnectedGoogleAccountStatus[]
+  productSenders: ProductSenderStatus[]
 }
 
 const googleLoginEnabled = process.env.NEXT_PUBLIC_GOOGLE_AUTH_ENABLED === 'true'
@@ -44,6 +51,8 @@ export default function SalesAgentGate() {
     connected: false,
     canSend: false,
     googleEmail: null,
+    accounts: [],
+    productSenders: [],
   })
 
   const authenticatedFetch = useCallback(async (path: string, init?: RequestInit) => {
@@ -62,7 +71,7 @@ export default function SalesAgentGate() {
       if (!response.ok) return
       setGmailStatus((await response.json()) as GmailStatus)
     } catch {
-      setGmailStatus({ connected: false, canSend: false, googleEmail: null })
+      setGmailStatus({ connected: false, canSend: false, googleEmail: null, accounts: [], productSenders: [] })
     }
   }, [authenticatedFetch])
 
@@ -87,7 +96,7 @@ export default function SalesAgentGate() {
       await loadGmailStatus()
       return
     }
-    setGmailStatus(data as GmailStatus)
+    await loadGmailStatus()
   }, [authenticatedFetch, loadGmailStatus])
 
   useEffect(() => {
@@ -170,7 +179,34 @@ export default function SalesAgentGate() {
     if (!supabase) return
     await supabase.auth.signOut()
     setUser(null)
-    setGmailStatus({ connected: false, canSend: false, googleEmail: null })
+    setGmailStatus({ connected: false, canSend: false, googleEmail: null, accounts: [], productSenders: [] })
+  }
+
+  async function connectAnotherGoogleAccount() {
+    setBusy(true)
+    setError('')
+    try {
+      const response = await authenticatedFetch('/api/sales-agent/google/oauth/start', { method: 'POST' })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok || typeof data.authorizationUrl !== 'string') {
+        throw new Error(data.error || 'Googleアカウント接続を開始できませんでした。')
+      }
+      window.location.assign(data.authorizationUrl)
+    } catch (caught) {
+      setBusy(false)
+      setError(caught instanceof Error ? caught.message : 'Googleアカウント接続を開始できませんでした。')
+    }
+  }
+
+  async function saveSenderSettings(input: SenderSettingsInput) {
+    const response = await authenticatedFetch('/api/sales-agent/google/status', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    })
+    const data = await response.json().catch(() => ({}))
+    if (!response.ok) throw new Error(data.error || '送信元設定を保存できませんでした。')
+    setGmailStatus(data as GmailStatus)
   }
 
   if (loading) {
@@ -195,7 +231,7 @@ export default function SalesAgentGate() {
             営業先、作成済みメール、送信履歴、Gmail接続はGoogleアカウントごとに分離されます。
           </p>
           <div className="mt-6 rounded-lg border border-[#d9dbd5] bg-white p-4 text-sm font-bold">
-            <div className="flex items-center gap-2"><Mail size={17} className="text-[#2b4c7e]" /> ログイン本人のGmailから送信</div>
+            <div className="flex items-center gap-2"><Mail size={17} className="text-[#2b4c7e]" /> 本人が接続したGmailから送信</div>
             <div className="mt-2 flex items-center gap-2"><ShieldCheck size={17} className="text-emerald-700" /> 他のユーザーの履歴は表示しません</div>
           </div>
           {googleLoginEnabled ? (
@@ -224,9 +260,11 @@ export default function SalesAgentGate() {
       userEmail={email}
       userName={String(user.user_metadata?.full_name || user.user_metadata?.name || '').trim()}
       initialProfile={readInitialProfile(user.user_metadata?.sales_profile)}
-      gmailConnected={gmailStatus.connected && gmailStatus.canSend}
+      googleAccounts={gmailStatus.accounts || []}
+      productSenders={gmailStatus.productSenders || []}
       googleAuthEnabled={googleLoginEnabled}
-      onReconnectGoogle={signInWithGoogle}
+      onConnectGoogle={connectAnotherGoogleAccount}
+      onSaveSenderSettings={saveSenderSettings}
       onSignOut={signOut}
     />
   )

@@ -1,10 +1,11 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { requireSalesAgentUser } from '@/lib/sales-agent-auth'
+import { checkGoogleSenderDomainAuth } from '@/lib/sales-agent-domain-auth'
 import {
   getValidSalesAgentAccessToken,
   sendSalesEmail,
-  type SalesAgentGoogleConnection,
 } from '@/lib/sales-agent-google'
+import { normalizeSalesProduct, resolveProductSender } from '@/lib/sales-agent-senders'
 
 export const maxDuration = 45
 
@@ -18,9 +19,9 @@ type SendInput = {
   confirmed?: boolean
   confirmationText?: string
   attachLooqDeck?: boolean
+  product?: string
 }
 
-const dailySendLimit = Math.max(1, Math.min(100, Number(process.env.SALES_AGENT_DAILY_SEND_LIMIT || 20)))
 const pitchDeck = {
   filename: 'LOOQ_pitchdeck_JP.pdf',
   mimeType: 'application/pdf',
@@ -37,38 +38,82 @@ export async function POST(request: NextRequest) {
   if (validationError) return NextResponse.json({ error: validationError }, { status: 400 })
 
   const to = input!.to!.trim().toLowerCase()
+  const product = normalizeSalesProduct(input!.product)
+  if (!product) return NextResponse.json({ error: '送信する商材を DOGEDAY / ALTLIER / LOOQ から選んでください。' }, { status: 400 })
   const approvedBy = input!.approvedBy!.trim().toLowerCase()
   if (approvedBy !== context.user.email?.toLowerCase()) {
     return NextResponse.json({ error: 'ログイン本人の承認を確認できません。' }, { status: 403 })
   }
 
-  const { count, error: countError } = await context.admin
+  let senderResolution: Awaited<ReturnType<typeof resolveProductSender>>
+  try {
+    senderResolution = await resolveProductSender(context.admin, context.workspaceId, context.user.id, product)
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : '送信アカウントを確認できませんでした。' }, { status: 409 })
+  }
+  const connection = senderResolution.account
+  const googleEmail = connection.google_email
+  const dailySendLimit = connection.daily_send_limit
+
+  let domainAuth
+  try {
+    domainAuth = await checkGoogleSenderDomainAuth(googleEmail)
+  } catch (error) {
+    return NextResponse.json({ error: `送信元ドメインのDNSを確認できませんでした: ${error instanceof Error ? error.message : 'unknown error'}` }, { status: 502 })
+  }
+  const skipDomainAuth = process.env.SALES_AGENT_SKIP_DOMAIN_AUTH_CHECK === 'true'
+  if (!domainAuth.pass && !skipDomainAuth) {
+    await context.admin.from('work_os_activity_events').insert({
+      workspace_id: context.workspaceId,
+      actor_type: 'system',
+      event_type: 'sales_domain_auth_blocked',
+      summary: `${googleEmail} のメール認証不備により送信を停止`,
+      payload: { product, sender_email: googleEmail, domain_auth: domainAuth },
+    })
+    return NextResponse.json({
+      error: `送信元 ${googleEmail} のメール認証が未完了のため送信を停止しました。${domainAuth.failures.join(' ')}`,
+      domainAuth,
+    }, { status: 409 })
+  }
+  if (!domainAuth.pass && skipDomainAuth) {
+    console.warn('[sales-agent] SALES_AGENT_SKIP_DOMAIN_AUTH_CHECK bypassed failed authentication', {
+      product,
+      senderEmail: googleEmail,
+      failures: domainAuth.failures,
+    })
+    await context.admin.from('work_os_activity_events').insert({
+      workspace_id: context.workspaceId,
+      actor_type: 'system',
+      event_type: 'sales_domain_auth_bypassed',
+      summary: `${googleEmail} のメール認証不備を環境変数で迂回`,
+      payload: { product, sender_email: googleEmail, domain_auth: domainAuth },
+    })
+  }
+
+  const { data: sentToday, error: countError } = await context.admin
     .from('work_os_activity_events')
-    .select('id', { count: 'exact', head: true })
+    .select('payload')
     .eq('workspace_id', context.workspaceId)
     .eq('event_type', 'sales_email_sent')
     .gte('created_at', startOfTokyoDay())
   if (countError) return NextResponse.json({ error: countError.message }, { status: 500 })
-  if ((count || 0) >= dailySendLimit) {
-    return NextResponse.json({ error: `本日の送信上限 ${dailySendLimit} 通に達しました。` }, { status: 429 })
+  const accountSendCount = (sentToday || []).filter((event) => {
+    const payload = event.payload && typeof event.payload === 'object' ? event.payload as Record<string, unknown> : {}
+    return String(payload.sender_email || payload.google_email || '').trim().toLowerCase() === googleEmail
+  }).length
+  if (accountSendCount >= dailySendLimit) {
+    return NextResponse.json({ error: `${googleEmail} の本日の送信上限 ${dailySendLimit} 通に達しました。` }, { status: 429 })
   }
 
-  const [suppressionLookup, duplicateLookup, connectionLookup] = await Promise.all([
+  const [suppressionLookup, duplicateLookup] = await Promise.all([
     context.admin.from('work_os_activity_events').select('id,payload').eq('workspace_id', context.workspaceId).eq('event_type', 'sales_email_suppressed').eq('payload->>to_email', to).limit(1).maybeSingle(),
-    context.admin.from('work_os_activity_events').select('id,created_at').eq('workspace_id', context.workspaceId).eq('event_type', 'sales_email_sent').eq('payload->>to_email', to).limit(1).maybeSingle(),
-    context.admin.from('work_os_google_connections').select('*').eq('workspace_id', context.workspaceId).eq('user_id', context.user.id).maybeSingle(),
+    context.admin.from('work_os_activity_events').select('id,created_at').eq('workspace_id', context.workspaceId).eq('event_type', 'sales_email_sent').eq('payload->>to_email', to).eq('payload->>product', product).limit(1).maybeSingle(),
   ])
-  const lookupError = suppressionLookup.error || duplicateLookup.error || connectionLookup.error
+  const lookupError = suppressionLookup.error || duplicateLookup.error
   if (lookupError) return NextResponse.json({ error: lookupError.message }, { status: 500 })
   if (suppressionLookup.data) return NextResponse.json({ error: 'この宛先は配信停止リストに登録されています。' }, { status: 409 })
   if (duplicateLookup.data) return NextResponse.json({ error: 'この宛先には送信済みです。重複送信を停止しました。' }, { status: 409 })
-  if (!connectionLookup.data) return NextResponse.json({ error: '送信前にGmailを接続してください。' }, { status: 409 })
-  const connection = connectionLookup.data as SalesAgentGoogleConnection
-  const googleEmail = connection.google_email?.trim().toLowerCase() || ''
-  if (!googleEmail || googleEmail !== context.user.email?.toLowerCase()) {
-    return NextResponse.json({ error: 'ログイン本人のGmail接続を確認できません。再接続してください。' }, { status: 403 })
-  }
-  const shouldAttachLooqDeck = input!.attachLooqDeck === true && googleEmail.endsWith('@looq.icu')
+  const shouldAttachLooqDeck = input!.attachLooqDeck === true && product === 'LOOQ' && googleEmail.endsWith('@looq.icu')
   const attachmentNames = shouldAttachLooqDeck ? [pitchDeck.filename] : []
 
   const { data: audit, error: auditError } = await context.admin.from('work_os_activity_events').insert({
@@ -79,6 +124,8 @@ export async function POST(request: NextRequest) {
     payload: {
       approved_by: approvedBy,
       google_email: googleEmail,
+      sender_email: googleEmail,
+      product,
       organization: input!.organization!.trim(),
       to_email: to,
       subject: input!.subject!.trim(),
@@ -113,6 +160,8 @@ export async function POST(request: NextRequest) {
         approval_event_id: audit.id,
         approved_by: approvedBy,
         google_email: googleEmail,
+        sender_email: googleEmail,
+        product,
         organization: input!.organization!.trim(),
         to_email: to,
         subject: input!.subject!.trim(),
@@ -134,6 +183,8 @@ export async function POST(request: NextRequest) {
       attachments: attachmentNames,
       auditRecorded: !sentAuditError,
       auditWarning: sentAuditError ? '送信済みですが監査ログの保存に失敗しました。' : null,
+      product,
+      domainAuth,
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Gmail送信に失敗しました。'
@@ -145,6 +196,9 @@ export async function POST(request: NextRequest) {
       payload: {
         approval_event_id: audit.id,
         approved_by: approvedBy,
+        google_email: googleEmail,
+        sender_email: googleEmail,
+        product,
         to_email: to,
         subject: input!.subject!.trim(),
         source_url: input!.sourceUrl!.trim(),
@@ -173,6 +227,7 @@ function validateSendInput(input: SendInput | null) {
   if (!input) return '送信内容がありません。'
   if (input.confirmed !== true || input.confirmationText !== 'APPROVE_AND_SEND') return '最終承認が必要です。'
   if (!input.approvedBy?.trim()) return '承認者を確認できません。'
+  if (!normalizeSalesProduct(input.product)) return '送信する商材を選んでください。'
   if (!input.organization?.trim() || input.organization.length > 200) return '営業先名を確認してください。'
   if (!input.subject?.trim() || input.subject.length > 180) return '件名を確認してください。'
   if (!input.body?.trim() || input.body.length > 12_000) return '本文を確認してください。'

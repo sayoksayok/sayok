@@ -1,8 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { requireSalesAgentUser } from '@/lib/sales-agent-auth'
+import { gmailSendScope, saveSalesGoogleAccount } from '@/lib/sales-agent-google-accounts'
 import { encryptToken } from '@/lib/work-os-server'
-
-const gmailSendScope = 'https://www.googleapis.com/auth/gmail.send'
 
 type TokenInfo = {
   email?: string
@@ -40,12 +39,6 @@ export async function POST(request: NextRequest) {
         { status: 401 },
       )
     }
-    if (googleEmail !== context.user.email?.toLowerCase()) {
-      return NextResponse.json(
-        { error: 'ログイン中のGoogleアカウントと同じGmailだけ接続できます。' },
-        { status: 403 },
-      )
-    }
     if (!scopes.includes(gmailSendScope)) {
       return NextResponse.json(
         { error: 'Gmail送信権限がありません。Googleを再接続してください。' },
@@ -55,7 +48,7 @@ export async function POST(request: NextRequest) {
 
     const { error: profileError } = await context.admin.from('work_os_user_profiles').upsert({
       user_id: context.user.id,
-      email: googleEmail,
+      email: context.user.email?.toLowerCase() || googleEmail,
       full_name: context.user.user_metadata?.full_name || context.user.user_metadata?.name || null,
       avatar_url: context.user.user_metadata?.avatar_url || null,
       auth_provider: 'google',
@@ -92,11 +85,23 @@ export async function POST(request: NextRequest) {
     }, { onConflict: 'workspace_id,user_id' })
     if (error) throw new Error(error.message)
 
+    await saveSalesGoogleAccount(context.admin, {
+      workspaceId: context.workspaceId,
+      userId: context.user.id,
+      googleEmail,
+      accessToken: body.accessToken,
+      refreshToken: body.refreshToken,
+      tokenExpiresAt,
+      scopes,
+      allowMissingRelation: true,
+    })
+
     return NextResponse.json({
       connected: true,
       canSend: true,
       googleEmail,
       needsReauth: false,
+      refreshStatus: true,
     })
   } catch (error) {
     return NextResponse.json(

@@ -42,6 +42,28 @@ export type SenderProfile = {
   language: 'English' | 'Japanese'
 }
 
+export type SalesProduct = 'DOGEDAY' | 'ALTLIER' | 'LOOQ'
+
+export type ConnectedGoogleAccountStatus = {
+  email: string
+  status: 'connected' | 'needs_reauth' | 'revoked' | 'error'
+  canSend: boolean
+  needsReauth: boolean
+  dailySendLimit: number
+  connectionSource: 'sales_agent_google_accounts' | 'work_os_google_connections'
+}
+
+export type ProductSenderStatus = {
+  product: SalesProduct
+  senderEmail: string
+  source: 'database' | 'environment'
+}
+
+export type SenderSettingsInput = {
+  productSenders: Partial<Record<SalesProduct, string>>
+  accountLimits: Record<string, number>
+}
+
 type Draft = {
   subject: string
   body: string
@@ -72,6 +94,7 @@ type SendHistoryItem = {
   sourceUrl: string
   sentAt: string
   fromEmail: string
+  product: string
   gmailMessageId: string
 }
 
@@ -80,7 +103,7 @@ const STORAGE_KEY = 'sayok:sales-agent:v2'
 const LEGACY_PROFILE_KEY = 'sayok:sales-profile:v2'
 const PROFILE_KEY = 'sayok:sales-profile:v3'
 const BULK_CONFIRM_ID = '__bulk_send__'
-const BULK_TEMPLATE_VERSION = 6
+const BULK_TEMPLATE_VERSION = 7
 const LEAD_QUALITY_VERSION = 7
 const SALES_DECK_DRIVE_URL = 'https://drive.google.com/file/d/1p5NZiJnWU2CrnBmn2tb82iZbre7W0x9G/view?usp=sharing'
 const DOGEDAY_DECK_DRIVE_URL = 'https://drive.google.com/file/d/1_wuTyBDHFicPemao96BZ6k0w14mXD2IN/view?usp=sharing'
@@ -145,6 +168,25 @@ DOGE DAY 2026 partnership deck:
 ${DOGEDAY_DECK_DRIVE_URL}`,
 }
 
+const altlierBulkTemplate: BulkTemplate = {
+  subject: 'Japan/APAC growth idea for {{会社名}}',
+  body: `Hi {{宛名}},
+
+I am {{差出人名}} from {{自社名}}.
+
+I am reaching out because {{会社名}} appears relevant to the kind of hands-on Japan and APAC expansion work we support. ALTLIER helps global AI, Web3, developer-tool, and internet-product companies with positioning, localization, community building, partnerships, events, and local production.
+
+Rather than send a broad market-entry proposal, I would be glad to prepare one concrete idea around {{会社名}}'s current product and Japan/APAC priorities.
+
+Would you be open to a short call, or could you point me to the person responsible for regional growth or partnerships?`,
+}
+
+const salesProductOptions: Array<{ value: SalesProduct; label: string; description: string }> = [
+  { value: 'DOGEDAY', label: 'DOGE DAY', description: 'スポンサー・ブランド連携' },
+  { value: 'ALTLIER', label: 'ALTLIER', description: 'Japan / APAC進出支援' },
+  { value: 'LOOQ', label: 'LOOQ', description: '屋外広告・サイネージ測定' },
+]
+
 const emptyProfile: SenderProfile = {
   senderName: '',
   senderCompany: '',
@@ -170,24 +212,44 @@ type SalesAgentProps = {
   userEmail: string
   userName: string
   initialProfile?: Partial<SenderProfile>
-  gmailConnected: boolean
+  googleAccounts: ConnectedGoogleAccountStatus[]
+  productSenders: ProductSenderStatus[]
   googleAuthEnabled: boolean
-  onReconnectGoogle: () => void
+  onConnectGoogle: () => void
+  onSaveSenderSettings: (input: SenderSettingsInput) => Promise<void>
   onSignOut: () => void
 }
 
-export default function SalesAgent({ userId, userEmail, userName, initialProfile, gmailConnected, googleAuthEnabled, onReconnectGoogle, onSignOut }: SalesAgentProps) {
-  const defaultTargetMarket = userEmail.trim().toLowerCase() === 'dogejapan@ownthedoge.com' ? 'United States' : ''
-  const defaultGoal = userEmail.trim().toLowerCase() === 'dogejapan@ownthedoge.com'
+export default function SalesAgent({
+  userId,
+  userEmail,
+  userName,
+  initialProfile,
+  googleAccounts,
+  productSenders,
+  googleAuthEnabled,
+  onConnectGoogle,
+  onSaveSenderSettings,
+  onSignOut,
+}: SalesAgentProps) {
+  const [product, setProduct] = useState<SalesProduct>(() => initialProductForUser(userEmail))
+  const senderMapping = productSenders.find((item) => item.product === product)
+  const selectedSenderEmail = senderMapping?.senderEmail || ''
+  const selectedSenderAccount = googleAccounts.find((account) => account.email === selectedSenderEmail)
+  const gmailConnected = Boolean(selectedSenderAccount?.canSend)
+  const defaultTargetMarket = product === 'DOGEDAY' ? 'United States' : product === 'LOOQ' ? 'Japan' : ''
+  const defaultGoal = product === 'DOGEDAY'
     ? 'DOGE DAY 2026のスポンサーとアクティベーションパートナーを探す'
-    : ''
+    : product === 'LOOQ'
+      ? 'LOOQの屋外広告・デジタルサイネージ効果測定を提案する'
+      : '日本・APAC市場への進出支援を提案する'
   const defaultProfile = useMemo(
-    () => profileForUser(userEmail, userName, initialProfile),
-    [initialProfile, userEmail, userName],
+    () => profileForProduct(product, userEmail, userName, selectedSenderEmail, initialProfile),
+    [initialProfile, product, selectedSenderEmail, userEmail, userName],
   )
-  const defaultBulkTemplate = useMemo(() => bulkTemplateForUser(userEmail), [userEmail])
-  const storageKey = `${STORAGE_KEY}:${userId}`
-  const profileKey = `${PROFILE_KEY}:${userId}`
+  const defaultBulkTemplate = useMemo(() => bulkTemplateForProduct(product), [product])
+  const storageKey = `${STORAGE_KEY}:${userId}:${product}`
+  const profileKey = `${PROFILE_KEY}:${userId}:${product}`
   const [step, setStep] = useState(1)
   const [siteUrl, setSiteUrl] = useState('')
   const [analysis, setAnalysis] = useState<SiteAnalysis | null>(null)
@@ -215,7 +277,15 @@ export default function SalesAgent({ userId, userEmail, userName, initialProfile
   const [verifiedLeadImport, setVerifiedLeadImport] = useState('')
   const [profileSaveBusy, setProfileSaveBusy] = useState(false)
   const [profileSaved, setProfileSaved] = useState(false)
+  const [mappingDrafts, setMappingDrafts] = useState<Partial<Record<SalesProduct, string>>>({})
+  const [limitDrafts, setLimitDrafts] = useState<Record<string, number>>({})
+  const [senderSettingsBusy, setSenderSettingsBusy] = useState(false)
   const hydrated = hydratedStorageKey === storageKey
+
+  useEffect(() => {
+    setMappingDrafts(Object.fromEntries(productSenders.map((item) => [item.product, item.senderEmail])) as Partial<Record<SalesProduct, string>>)
+    setLimitDrafts(Object.fromEntries(googleAccounts.map((account) => [account.email, account.dailySendLimit])))
+  }, [googleAccounts, productSenders])
 
   useEffect(() => {
     setHydratedStorageKey('')
@@ -289,7 +359,7 @@ export default function SalesAgent({ userId, userEmail, userName, initialProfile
         setResult(currentLeadQuality ? saved.result || null : null)
         const currentBulkTemplate = saved.bulkTemplateVersion === BULK_TEMPLATE_VERSION
         setDrafts(currentLeadQuality && currentBulkTemplate
-          ? Object.fromEntries(Object.entries(saved.drafts || {}).map(([leadId, draft]) => [leadId, normalizeDraftForUser(draft, userEmail)]))
+          ? Object.fromEntries(Object.entries(saved.drafts || {}).map(([leadId, draft]) => [leadId, normalizeDraftForProduct(draft, product)]))
           : {})
         setBulkTemplate(currentBulkTemplate
           ? { ...defaultBulkTemplate, ...saved.bulkTemplate }
@@ -301,7 +371,7 @@ export default function SalesAgent({ userId, userEmail, userName, initialProfile
     } finally {
       setHydratedStorageKey(storageKey)
     }
-  }, [defaultBulkTemplate, defaultGoal, defaultProfile, defaultTargetMarket, profileKey, storageKey, userEmail])
+  }, [defaultBulkTemplate, defaultGoal, defaultProfile, defaultTargetMarket, product, profileKey, storageKey, userEmail, userId])
 
   useEffect(() => {
     if (!hydrated) return
@@ -373,8 +443,10 @@ export default function SalesAgent({ userId, userEmail, userName, initialProfile
   }, [result, targetMarket])
 
   const sentHistoryByEmail = useMemo(
-    () => new Map(sendHistory.map((item) => [item.toEmail.trim().toLowerCase(), item])),
-    [sendHistory],
+    () => new Map(sendHistory
+      .filter((item) => !item.product || item.product === product)
+      .map((item) => [item.toEmail.trim().toLowerCase(), item])),
+    [product, sendHistory],
   )
   const accepted = historyBusy || historyError ? [] : leadViews.filter((item) => (
     item.validation.ok
@@ -429,7 +501,7 @@ export default function SalesAgent({ userId, userEmail, userName, initialProfile
       ...profile,
       websiteUrl: profile.websiteUrl.trim() ? normalizeUrl(profile.websiteUrl) : '',
       salesDeckUrl: profile.salesDeckUrl.trim() ? normalizeUrl(profile.salesDeckUrl) : '',
-      attachLooqDeck: profile.attachLooqDeck && userEmail.endsWith('@looq.icu'),
+      attachLooqDeck: profile.attachLooqDeck && product === 'LOOQ',
     }
     const { error: saveError } = await supabase.auth.updateUser({
       data: { sales_profile: normalizedProfile },
@@ -441,7 +513,23 @@ export default function SalesAgent({ userId, userEmail, userName, initialProfile
     }
     setProfile(normalizedProfile)
     setProfileSaved(true)
-    setNotice('差出人情報をこのGoogleアカウント専用に保存しました。')
+    setNotice('差出人情報をこのログインユーザー用に保存しました。')
+  }
+
+  async function saveSenderSettings() {
+    setSenderSettingsBusy(true)
+    setError('')
+    try {
+      await onSaveSenderSettings({
+        productSenders: mappingDrafts,
+        accountLimits: limitDrafts,
+      })
+      setNotice('商材ごとの送信元と、アカウント別の日次上限を保存しました。')
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : '送信元設定を保存できませんでした。')
+    } finally {
+      setSenderSettingsBusy(false)
+    }
   }
 
   async function analyzeSite() {
@@ -651,7 +739,7 @@ export default function SalesAgent({ userId, userEmail, userName, initialProfile
           serviceNote: profile.serviceNote,
           senderWebsite: profile.websiteUrl,
           salesDeckUrl: profile.salesDeckUrl,
-          attachLooqDeck: profile.attachLooqDeck && userEmail.endsWith('@looq.icu'),
+          attachLooqDeck: profile.attachLooqDeck && product === 'LOOQ',
           tone: profile.tone,
           language: profile.language,
         }),
@@ -660,7 +748,7 @@ export default function SalesAgent({ userId, userEmail, userName, initialProfile
       if (!response.ok) throw new Error(data.error || '文面を作成できませんでした。')
       setDrafts((current) => ({
         ...current,
-        [item.lead.id]: normalizeDraftForUser({ ...data.draft, state: 'ready' }, userEmail),
+        [item.lead.id]: normalizeDraftForProduct({ ...data.draft, state: 'ready' }, product),
       }))
     } catch (err) {
       setError(err instanceof Error ? err.message : '文面を作成できませんでした。')
@@ -713,7 +801,7 @@ export default function SalesAgent({ userId, userEmail, userName, initialProfile
       return message
     }
 
-    const normalizedDraft = normalizeDraftForUser(draft, userEmail)
+    const normalizedDraft = normalizeDraftForProduct(draft, product)
     const fullBody = `${prepareSalesBody(normalizedDraft.body, profile)}\n\n${buildFooter(profile)}`
     setDrafts((current) => ({
       ...current,
@@ -733,9 +821,10 @@ export default function SalesAgent({ userId, userEmail, userName, initialProfile
           organization: cleanOrganizationName(item.lead),
           sourceUrl: contact.sourceUrl,
           approvedBy: userEmail,
+          product,
           confirmed: true,
           confirmationText: 'APPROVE_AND_SEND',
-          attachLooqDeck: profile.attachLooqDeck && userEmail.endsWith('@looq.icu'),
+          attachLooqDeck: profile.attachLooqDeck && product === 'LOOQ',
         }),
       })
       const data = await response.json().catch(() => ({}))
@@ -745,7 +834,7 @@ export default function SalesAgent({ userId, userEmail, userName, initialProfile
         [item.lead.id]: { ...draft, state: 'sent' },
       }))
       setHistoryRefreshKey((key) => key + 1)
-      if (!options?.silent) setNotice(`${cleanOrganizationName(item.lead)} へ ${userEmail} から送信しました。`)
+      if (!options?.silent) setNotice(`${cleanOrganizationName(item.lead)} へ ${data.from || selectedSenderEmail} から送信しました。`)
       setConfirmId('')
       return null
     } catch (err) {
@@ -779,7 +868,7 @@ export default function SalesAgent({ userId, userEmail, userName, initialProfile
       else sent += 1
     }
     setBusy('')
-    if (sent) setNotice(`${sent}通を ${userEmail} から送信しました。`)
+    if (sent) setNotice(`${sent}通を ${selectedSenderEmail} から送信しました。`)
     if (failures.length) setError(`${failures.length}通を送信できませんでした。${failures.join(' / ')}`)
   }
 
@@ -850,7 +939,11 @@ export default function SalesAgent({ userId, userEmail, userName, initialProfile
             <div className="hidden text-right sm:block">
               <p className="text-xs font-black text-[#20242b]">{userEmail}</p>
               <p className={`text-[11px] font-bold ${gmailConnected ? 'text-emerald-700' : googleAuthEnabled ? 'text-[#bc3f34]' : 'text-amber-700'}`}>
-                {gmailConnected ? 'Gmail送信 接続済み' : googleAuthEnabled ? 'Gmail再接続が必要' : 'Gmail送信 設定中'}
+                {gmailConnected
+                  ? `${product}: ${selectedSenderEmail}`
+                  : selectedSenderEmail
+                    ? `${product}: 再接続が必要`
+                    : `${product}: 送信元未設定`}
               </p>
             </div>
             <button
@@ -907,6 +1000,108 @@ export default function SalesAgent({ userId, userEmail, userName, initialProfile
       </header>
 
       <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
+        <section className="mb-7 border-b border-[#d9dbd5] pb-7" aria-labelledby="campaign-heading">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <p className="text-xs font-black tracking-[0.14em] text-[#bc3f34]">CAMPAIGN</p>
+              <h1 id="campaign-heading" className="mt-1 text-2xl font-black">商材を選ぶ</h1>
+              <p className="mt-2 text-sm font-semibold text-[#6b7076]">営業先・文面・資料・送信元を商材ごとに完全に分けます。</p>
+            </div>
+            <div className="grid w-full gap-2 sm:grid-cols-3 lg:max-w-2xl">
+              {salesProductOptions.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setProduct(option.value)}
+                  className={`min-h-20 border px-4 py-3 text-left transition ${
+                    product === option.value
+                      ? 'border-[#2b4c7e] bg-[#eef2f7] text-[#1e3a63]'
+                      : 'border-[#d9dbd5] bg-white hover:border-[#2b4c7e]'
+                  }`}
+                >
+                  <span className="block text-sm font-black">{option.label}</span>
+                  <span className="mt-1 block text-xs font-semibold text-[#6b7076]">{option.description}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <details className="mt-5 border border-[#d9dbd5] bg-[#fbfbf9]">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3 text-sm font-black">
+              <span>Google送信アカウント設定</span>
+              <span className={gmailConnected ? 'text-emerald-700' : 'text-[#bc3f34]'}>
+                {selectedSenderEmail || '未設定'}
+              </span>
+            </summary>
+            <div className="border-t border-[#d9dbd5] p-4">
+              <div className="grid gap-4 lg:grid-cols-2">
+                <div>
+                  <p className="text-xs font-black tracking-[0.08em] text-[#5f656c]">商材ごとの送信元</p>
+                  <div className="mt-3 grid gap-3">
+                    {salesProductOptions.map((option) => (
+                      <label key={option.value} className="grid gap-1 text-sm font-bold sm:grid-cols-[7rem_1fr] sm:items-center">
+                        <span>{option.label}</span>
+                        <select
+                          className="field-input"
+                          value={mappingDrafts[option.value] || ''}
+                          onChange={(event) => setMappingDrafts((current) => ({ ...current, [option.value]: event.target.value }))}
+                        >
+                          <option value="">送信元を選択</option>
+                          {googleAccounts.map((account) => (
+                            <option key={account.email} value={account.email}>
+                              {account.email}{account.canSend ? '' : '（再接続が必要）'}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <p className="text-xs font-black tracking-[0.08em] text-[#5f656c]">接続済みアカウント・日次上限</p>
+                  <div className="mt-3 grid gap-2">
+                    {googleAccounts.length ? googleAccounts.map((account) => (
+                      <div key={account.email} className="flex flex-col gap-2 border border-[#e2e4df] bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-black">{account.email}</p>
+                          <p className={`text-xs font-bold ${account.canSend ? 'text-emerald-700' : 'text-[#bc3f34]'}`}>
+                            {account.canSend ? 'Gmail送信権限あり' : '再接続が必要'}
+                          </p>
+                        </div>
+                        <label className="flex items-center gap-2 text-xs font-bold">
+                          1日
+                          <input
+                            type="number"
+                            min={1}
+                            max={500}
+                            className="w-20 border border-[#cfd2cc] bg-white px-2 py-2 text-right"
+                            value={limitDrafts[account.email] || account.dailySendLimit}
+                            disabled={account.connectionSource !== 'sales_agent_google_accounts'}
+                            onChange={(event) => setLimitDrafts((current) => ({ ...current, [account.email]: Number(event.target.value) }))}
+                          />
+                          通
+                        </label>
+                      </div>
+                    )) : (
+                      <p className="border border-dashed border-[#cfd2cc] bg-white p-3 text-sm font-semibold text-[#6b7076]">営業用Googleアカウントが未接続です。</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <div className="mt-4 flex flex-wrap justify-end gap-2">
+                <SecondaryButton onClick={onConnectGoogle} disabled={!googleAuthEnabled}>
+                  <RefreshCw size={16} /> Googleアカウントを追加
+                </SecondaryButton>
+                <PrimaryButton onClick={() => void saveSenderSettings()} disabled={senderSettingsBusy || !googleAccounts.length}>
+                  <ShieldCheck size={16} /> {senderSettingsBusy ? '保存中…' : '送信元設定を保存'}
+                </PrimaryButton>
+              </div>
+              <p className="mt-3 text-xs font-semibold leading-5 text-[#6b7076]">
+                送信時は選択した商材に割り当てたアカウントだけを使用します。未設定の商材や他ユーザーのアカウントでは送信できません。
+              </p>
+            </div>
+          </details>
+        </section>
         {error && <Alert tone="error" onClose={() => setError('')}>{error}</Alert>}
         {notice && <Alert tone="success" onClose={() => setNotice('')}>{notice}</Alert>}
         {historyOpen && (
@@ -1162,7 +1357,7 @@ export default function SalesAgent({ userId, userEmail, userName, initialProfile
                       </select>
                     </Field>
                   </div>
-                  {userEmail.endsWith('@looq.icu') && (
+                  {product === 'LOOQ' && (
                     <label className="mt-4 flex items-center gap-3 rounded-md border border-[#d9dbd5] bg-white p-4 text-sm font-bold">
                       <input
                         type="checkbox"
@@ -1210,29 +1405,29 @@ export default function SalesAgent({ userId, userEmail, userName, initialProfile
                   </div>
                   <div className="mt-4 rounded-md bg-[#f2f5f9] p-4 text-xs font-semibold leading-6 text-[#46566d]">
                     自動差し替え： <code>{'{{宛名}}'}</code> <code>{'{{会社名}}'}</code> <code>{'{{差出人名}}'}</code> <code>{'{{自社名}}'}</code> <code>{'{{提案内容}}'}</code>
-                    <br />宛名が見つからない場合は「会社名 ご担当者様」にします。
+                    <br />宛名が見つからない場合は、英語では「会社名 team」、日本語では「会社名 ご担当者様」にします。
                   </div>
-                  {(profile.salesDeckUrl || (profile.attachLooqDeck && userEmail.endsWith('@looq.icu'))) && (
+                  {(profile.salesDeckUrl || (profile.attachLooqDeck && product === 'LOOQ')) && (
                     <div className="mt-3 flex flex-col gap-2 rounded-md border border-emerald-200 bg-emerald-50 p-4 text-xs font-bold text-emerald-900 sm:flex-row sm:items-center sm:justify-between">
                       <span className="inline-flex items-center gap-2">
                         <Paperclip size={15} />
-                        {profile.attachLooqDeck && userEmail.endsWith('@looq.icu')
+                        {profile.attachLooqDeck && product === 'LOOQ'
                           ? 'LOOQ_pitchdeck_JP.pdfを全メールへ自動添付'
-                          : userEmail.trim().toLowerCase() === 'dogejapan@ownthedoge.com'
+                          : product === 'DOGEDAY'
                             ? 'DOGE DAY 2026 Deck URLを全メール本文へ自動挿入'
                             : '営業資料URLを全メールの本文へ自動挿入'}
                       </span>
                       <span className="flex min-w-0 flex-wrap items-center justify-end gap-3">
                         {profile.salesDeckUrl && (
                           <a href={normalizeUrl(profile.salesDeckUrl)} target="_blank" rel="noreferrer" className="max-w-full break-all underline">
-                            {userEmail.trim().toLowerCase() === 'dogejapan@ownthedoge.com' ? 'DOGE DAY 2026 Deckを確認' : '営業資料を確認'}
+                            {product === 'DOGEDAY' ? 'DOGE DAY 2026 Deckを確認' : '営業資料を確認'}
                           </a>
                         )}
-                        {profile.attachLooqDeck && userEmail.endsWith('@looq.icu') && <a href="/sales-assets/LOOQ_pitchdeck_JP.pdf" target="_blank" rel="noreferrer" className="underline">添付PDFを確認</a>}
+                        {profile.attachLooqDeck && product === 'LOOQ' && <a href="/sales-assets/LOOQ_pitchdeck_JP.pdf" target="_blank" rel="noreferrer" className="underline">添付PDFを確認</a>}
                       </span>
                     </div>
                   )}
-                  {userEmail.trim().toLowerCase() === 'dogejapan@ownthedoge.com' && (
+                  {product === 'DOGEDAY' && (
                     <div className="mt-3 rounded-md border border-[#d9dbd5] bg-white p-4 text-xs font-bold text-[#3f454b]">
                       <p className="font-black text-[#bc3f34]">過去のDOGE DAY実績を全メールへ挿入</p>
                       <div className="mt-2 flex flex-wrap gap-4">
@@ -1324,7 +1519,7 @@ export default function SalesAgent({ userId, userEmail, userName, initialProfile
             <SectionHeading
               eyebrow="STEP 4"
               title="内容を確認したら、送信はSayOKに任せる。"
-              copy={`宛先・出典・件名・本文を確認して承認すると、${userEmail} のGmailからその場で送信します。`}
+              copy={`宛先・出典・件名・本文を確認して承認すると、${selectedSenderEmail || '商材に設定したアカウント'} のGmailからその場で送信します。`}
             />
             {!profileComplete || !drafted.length ? (
               <MissingStep onClick={() => setStep(3)} label="先に差出人情報とメール下書きを完成させてください。" />
@@ -1334,20 +1529,22 @@ export default function SalesAgent({ userId, userEmail, userName, initialProfile
                   gmailConnected
                     ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
                     : 'border-amber-200 bg-amber-50 text-amber-900'
-                }`}>
+                  }`}>
                   <div>
-                    <p className="text-sm font-black">送信元: {userEmail}</p>
+                    <p className="text-sm font-black">{product} の送信元: {selectedSenderEmail || '未設定'}</p>
                     <p className="mt-1 text-xs font-bold">
                       {gmailConnected
                         ? 'Gmail送信権限を確認済みです。承認するまで送信しません。'
+                        : !selectedSenderEmail
+                          ? 'この商材の送信元を上のGoogle送信アカウント設定で選んでください。'
                         : googleAuthEnabled
-                          ? '実メール送信にはGmail権限の再接続が必要です。'
+                          ? `${selectedSenderEmail} のGmail権限を接続してください。`
                           : 'Gmail送信連携は設定中です。設定完了までは送信ボタンを利用できません。'}
                     </p>
                   </div>
                   {!gmailConnected && googleAuthEnabled && (
-                    <button type="button" onClick={onReconnectGoogle} className="inline-flex items-center justify-center gap-2 rounded-md bg-amber-900 px-4 py-3 text-sm font-black text-white">
-                      <RefreshCw size={16} /> Gmailを再接続
+                    <button type="button" onClick={onConnectGoogle} className="inline-flex items-center justify-center gap-2 rounded-md bg-amber-900 px-4 py-3 text-sm font-black text-white">
+                      <RefreshCw size={16} /> Googleアカウントを追加・再接続
                     </button>
                   )}
                 </div>
@@ -1402,7 +1599,7 @@ export default function SalesAgent({ userId, userEmail, userName, initialProfile
                       </div>
                       <div className="mt-4">
                         <p className="font-black">{draft.subject}</p>
-                        {profile.attachLooqDeck && userEmail.endsWith('@looq.icu') && (
+                        {profile.attachLooqDeck && product === 'LOOQ' && (
                           <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-[#eef2f7] px-3 py-1.5 text-xs font-black text-[#2b4c7e]">
                             <Paperclip size={14} /> LOOQ_pitchdeck_JP.pdf
                           </div>
@@ -1570,10 +1767,12 @@ function SendHistoryPanel({
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-black text-emerald-800">送信済み・再送対象外</span>
+                    {item.product && <span className="rounded-full bg-[#eef2f7] px-2.5 py-1 text-xs font-black text-[#2b4c7e]">{item.product}</span>}
                     <time className="text-xs font-bold text-[#6b7076]" dateTime={item.sentAt}>{formatTokyoDate(item.sentAt)}</time>
                   </div>
                   <h3 className="mt-2 text-lg font-black">{item.organization}</h3>
                   <p className="mt-1 break-all font-mono text-xs font-bold text-[#2b4c7e]">{item.toEmail}</p>
+                  {item.fromEmail && <p className="mt-1 break-all text-xs font-semibold text-[#6b7076]">送信元: {item.fromEmail}</p>}
                   <p className="mt-3 text-sm font-bold">{item.subject || '件名なし'}</p>
                 </div>
                 {item.sourceUrl && (
@@ -1906,30 +2105,56 @@ function prepareSalesBody(value: string, profile: SenderProfile) {
   return additions.length ? `${body}\n\n${additions.join('\n\n')}` : body
 }
 
-function profileForUser(email: string, userName: string, initialProfile?: Partial<SenderProfile>): SenderProfile {
-  const normalizedEmail = email.trim().toLowerCase()
-  const looqUser = normalizedEmail.endsWith('@looq.icu')
-  const dogeUser = normalizedEmail === 'dogejapan@ownthedoge.com'
-  const yudai = normalizedEmail === 'yudai@looq.icu'
-  const defaults: SenderProfile = {
-    ...emptyProfile,
-    senderName: dogeUser ? 'Yudai' : userName || (yudai ? '石田雄大' : ''),
-    senderCompany: looqUser ? 'LOOQ Japan' : dogeUser ? 'Own The Doge' : '',
-    senderAddress: yudai ? '〒150-0002 東京都渋谷区渋谷2-19-19 ワコー宮益坂ビル5階' : '',
-    senderContact: normalizedEmail,
-    websiteUrl: looqUser ? 'https://www.looq.jp/' : dogeUser ? 'https://ownthedoge.com/' : '',
-    salesDeckUrl: looqUser ? SALES_DECK_DRIVE_URL : dogeUser ? DOGEDAY_DECK_DRIVE_URL : '',
-    attachLooqDeck: looqUser,
-    serviceNote: dogeUser
-      ? 'DOGE DAY 2026 sponsorships and collaborations including brand activations, media placement, community engagement, VIP access, speaking opportunities, merchandise, and digital-collectible collaborations.'
-      : '',
-    language: dogeUser ? 'English' : 'Japanese',
+function initialProductForUser(email: string): SalesProduct {
+  return email.trim().toLowerCase().endsWith('@looq.icu') ? 'LOOQ' : 'DOGEDAY'
+}
+
+function profileForProduct(
+  product: SalesProduct,
+  loginEmail: string,
+  userName: string,
+  senderEmail: string,
+  initialProfile?: Partial<SenderProfile>,
+): SenderProfile {
+  const contact = senderEmail.trim().toLowerCase()
+  const defaultsByProduct: Record<SalesProduct, SenderProfile> = {
+    DOGEDAY: {
+      ...emptyProfile,
+      senderName: 'Yudai',
+      senderCompany: 'Own The Doge',
+      senderContact: contact,
+      websiteUrl: 'https://ownthedoge.com/',
+      salesDeckUrl: DOGEDAY_DECK_DRIVE_URL,
+      serviceNote: 'DOGE DAY 2026 sponsorships and collaborations including brand activations, media placement, community engagement, VIP access, speaking opportunities, merchandise, and digital-collectible collaborations.',
+      language: 'English',
+    },
+    ALTLIER: {
+      ...emptyProfile,
+      senderName: userName || 'Yudai',
+      senderCompany: 'ALTLIER',
+      senderContact: contact,
+      websiteUrl: 'https://altlier.io/',
+      serviceNote: 'Hands-on Japan and APAC expansion support covering positioning, localization, community building, partnerships, events, and local production.',
+      language: 'English',
+    },
+    LOOQ: {
+      ...emptyProfile,
+      senderName: userName || '石田雄大',
+      senderCompany: 'LOOQ Japan',
+      senderAddress: loginEmail.trim().toLowerCase() === 'yudai@looq.icu'
+        ? '〒150-0002 東京都渋谷区渋谷2-19-19 ワコー宮益坂ビル5階'
+        : '',
+      senderContact: contact,
+      websiteUrl: 'https://www.looq.jp/',
+      salesDeckUrl: SALES_DECK_DRIVE_URL,
+      attachLooqDeck: true,
+      serviceNote: '屋外広告・デジタルサイネージの現地計測、集計、信頼水準・除外条件・限界を明記した測定レポート。',
+      language: 'Japanese',
+    },
   }
-  return mergeProfileDefaults(defaults, {
-    ...defaults,
-    ...initialProfile,
-    attachLooqDeck: looqUser && initialProfile?.attachLooqDeck !== false,
-  })
+  const defaults = defaultsByProduct[product]
+  const savedMatchesProduct = initialProfile?.senderCompany?.trim().toLowerCase() === defaults.senderCompany.toLowerCase()
+  return mergeProfileDefaults(defaults, savedMatchesProduct ? initialProfile : undefined)
 }
 
 function mergeProfileDefaults(defaults: SenderProfile, saved?: Partial<SenderProfile>): SenderProfile {
@@ -1944,8 +2169,8 @@ function mergeProfileDefaults(defaults: SenderProfile, saved?: Partial<SenderPro
   return merged
 }
 
-function normalizeDraftForUser(draft: Draft, email: string): Draft {
-  if (email.trim().toLowerCase() !== 'dogejapan@ownthedoge.com') return draft
+function normalizeDraftForProduct(draft: Draft, product: SalesProduct): Draft {
+  if (product !== 'DOGEDAY') return draft
 
   const lines = draft.body
     .replace(/\bYudai\s+I\.(?=\s|[,;:]|$)/g, 'Yudai')
@@ -1960,10 +2185,10 @@ function normalizeDraftForUser(draft: Draft, email: string): Draft {
   return { ...draft, body: lines.join('\n') }
 }
 
-function bulkTemplateForUser(email: string) {
-  const normalizedEmail = email.trim().toLowerCase()
-  if (normalizedEmail.endsWith('@looq.icu')) return looqBulkTemplate
-  if (normalizedEmail === 'dogejapan@ownthedoge.com') return dogeDayBulkTemplate
+function bulkTemplateForProduct(product: SalesProduct) {
+  if (product === 'LOOQ') return looqBulkTemplate
+  if (product === 'DOGEDAY') return dogeDayBulkTemplate
+  if (product === 'ALTLIER') return altlierBulkTemplate
   return genericBulkTemplate
 }
 

@@ -36,7 +36,8 @@ export async function GET(request: NextRequest) {
         subject: cleanString(payload.subject),
         sourceUrl: cleanString(payload.source_url),
         sentAt: cleanString(payload.sent_at) || event.created_at,
-        fromEmail: cleanString(payload.google_email),
+        fromEmail: cleanString(payload.sender_email) || cleanString(payload.google_email),
+        product: cleanString(payload.product),
         gmailMessageId: cleanString(payload.gmail_message_id),
       }
     })
