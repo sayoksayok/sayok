@@ -110,7 +110,7 @@ const STORAGE_KEY = 'sayok:sales-agent:v3'
 const LEGACY_PROFILE_KEY = 'sayok:sales-profile:v2'
 const PROFILE_KEY = 'sayok:sales-profile:v3'
 const BULK_CONFIRM_ID = '__bulk_send__'
-const BULK_TEMPLATE_VERSION = 7
+const BULK_TEMPLATE_VERSION = 8
 const LEAD_QUALITY_VERSION = 8
 const SALES_DECK_DRIVE_URL = 'https://drive.google.com/file/d/1p5NZiJnWU2CrnBmn2tb82iZbre7W0x9G/view?usp=sharing'
 const DOGEDAY_DECK_DRIVE_URL = 'https://drive.google.com/file/d/1_wuTyBDHFicPemao96BZ6k0w14mXD2IN/view?usp=sharing'
@@ -248,8 +248,8 @@ export default function SalesAgent({
   const defaultTargetMarket = campaignPreset.targetMarket
   const defaultGoal = campaignPreset.goal
   const defaultProfile = useMemo(
-    () => profileForProduct(product, userEmail, userName, selectedSenderEmail, initialProfile),
-    [initialProfile, product, selectedSenderEmail, userEmail, userName],
+    () => profileForProduct(product, userName, selectedSenderEmail, initialProfile),
+    [initialProfile, product, selectedSenderEmail, userName],
   )
   const defaultBulkTemplate = useMemo(() => bulkTemplateForProduct(product), [product])
   const storageKey = `${STORAGE_KEY}:${userId}:${product}`
@@ -2222,7 +2222,6 @@ function initialProductForUser(email: string): SalesProduct {
 
 function profileForProduct(
   product: SalesProduct,
-  loginEmail: string,
   userName: string,
   senderEmail: string,
   initialProfile?: Partial<SenderProfile>,
@@ -2241,7 +2240,7 @@ function profileForProduct(
     },
     ALTLIER: {
       ...emptyProfile,
-      senderName: userName || 'Yudai',
+      senderName: normalizeSenderDisplayName(userName || 'Yudai'),
       senderCompany: 'ALTLIER',
       senderContact: contact,
       websiteUrl: 'https://altlier.io/',
@@ -2250,11 +2249,9 @@ function profileForProduct(
     },
     LOOQ: {
       ...emptyProfile,
-      senderName: userName || '石田雄大',
+      senderName: normalizeSenderDisplayName(userName || '石田雄大'),
       senderCompany: 'LOOQ Japan',
-      senderAddress: loginEmail.trim().toLowerCase() === 'yudai@looq.icu'
-        ? '〒150-0002 東京都渋谷区渋谷2-19-19 ワコー宮益坂ビル5階'
-        : '',
+      senderAddress: '〒150-0002 東京都渋谷区渋谷2-19-19 ワコー宮益坂ビル5階',
       senderContact: contact,
       websiteUrl: 'https://www.looq.jp/',
       salesDeckUrl: SALES_DECK_DRIVE_URL,
@@ -2271,7 +2268,9 @@ function profileForProduct(
 function mergeProfileDefaults(defaults: SenderProfile, saved?: Partial<SenderProfile>): SenderProfile {
   const merged: SenderProfile = { ...defaults, ...saved }
   if (!merged.senderName.trim()) merged.senderName = defaults.senderName
+  merged.senderName = normalizeSenderDisplayName(merged.senderName)
   if (!merged.senderCompany.trim()) merged.senderCompany = defaults.senderCompany
+  if (!merged.senderAddress.trim()) merged.senderAddress = defaults.senderAddress
   if (!merged.senderContact.trim()) merged.senderContact = defaults.senderContact
   if (!merged.websiteUrl.trim()) merged.websiteUrl = defaults.websiteUrl
   if (!merged.salesDeckUrl.trim()) merged.salesDeckUrl = defaults.salesDeckUrl
@@ -2281,19 +2280,24 @@ function mergeProfileDefaults(defaults: SenderProfile, saved?: Partial<SenderPro
 }
 
 function normalizeDraftForProduct(draft: Draft, product: SalesProduct): Draft {
-  if (product !== 'DOGEDAY') return draft
-
   const lines = draft.body
     .replace(/\bYudai\s+I\.(?=\s|[,;:]|$)/g, 'Yudai')
     .replace(/\bYudai\s+Ishida\b/g, 'Yudai')
     .split('\n')
   const firstContentLine = lines.findIndex((line) => line.trim().length > 0)
-  if (firstContentLine >= 0 && /ご担当者様|担当者様|御中/.test(lines[firstContentLine])) {
+  if (product === 'DOGEDAY' && firstContentLine >= 0 && /ご担当者様|担当者様|御中/.test(lines[firstContentLine])) {
     const companyMatch = lines[firstContentLine].match(/^Hi\s+(.+?)\s+(?:ご担当者様|担当者様|御中)/i)
     lines[firstContentLine] = companyMatch ? `Hi ${companyMatch[1]} team,` : 'Hi team,'
   }
 
   return { ...draft, body: lines.join('\n') }
+}
+
+function normalizeSenderDisplayName(name: string) {
+  return name
+    .trim()
+    .replace(/^Yudai\s+I\.?$/i, 'Yudai')
+    .replace(/^Yudai\s+Ishida$/i, 'Yudai')
 }
 
 function bulkTemplateForProduct(product: SalesProduct) {
