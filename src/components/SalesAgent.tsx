@@ -86,6 +86,13 @@ type LeadView = {
   validation: Validation
 }
 
+type CampaignPreset = {
+  websiteUrl: string
+  targetMarket: string
+  goal: string
+  hint: string
+}
+
 type SendHistoryItem = {
   id: string
   organization: string
@@ -99,12 +106,12 @@ type SendHistoryItem = {
 }
 
 const LEGACY_STORAGE_KEY = 'sayok:sales-agent:v1'
-const STORAGE_KEY = 'sayok:sales-agent:v2'
+const STORAGE_KEY = 'sayok:sales-agent:v3'
 const LEGACY_PROFILE_KEY = 'sayok:sales-profile:v2'
 const PROFILE_KEY = 'sayok:sales-profile:v3'
 const BULK_CONFIRM_ID = '__bulk_send__'
 const BULK_TEMPLATE_VERSION = 7
-const LEAD_QUALITY_VERSION = 7
+const LEAD_QUALITY_VERSION = 8
 const SALES_DECK_DRIVE_URL = 'https://drive.google.com/file/d/1p5NZiJnWU2CrnBmn2tb82iZbre7W0x9G/view?usp=sharing'
 const DOGEDAY_DECK_DRIVE_URL = 'https://drive.google.com/file/d/1_wuTyBDHFicPemao96BZ6k0w14mXD2IN/view?usp=sharing'
 const DOGEDAY_2023_URL = 'https://youtu.be/4-Xrxocl904?si=e6G5Y1TmzM7nX03n'
@@ -201,8 +208,8 @@ const emptyProfile: SenderProfile = {
 }
 
 const steps = [
-  ['一', '自社を知る'],
-  ['二', '相手を探す'],
+  ['一', '営業を始める'],
+  ['二', '候補を絞る'],
   ['三', '文を書く'],
   ['四', '承認して送る'],
 ] as const
@@ -237,12 +244,9 @@ export default function SalesAgent({
   const selectedSenderEmail = senderMapping?.senderEmail || ''
   const selectedSenderAccount = googleAccounts.find((account) => account.email === selectedSenderEmail)
   const gmailConnected = Boolean(selectedSenderAccount?.canSend)
-  const defaultTargetMarket = product === 'DOGEDAY' ? 'United States' : product === 'LOOQ' ? 'Japan' : ''
-  const defaultGoal = product === 'DOGEDAY'
-    ? 'DOGE DAY 2026のスポンサーとアクティベーションパートナーを探す'
-    : product === 'LOOQ'
-      ? 'LOOQの屋外広告・デジタルサイネージ効果測定を提案する'
-      : '日本・APAC市場への進出支援を提案する'
+  const campaignPreset = useMemo(() => campaignPresetForProduct(product), [product])
+  const defaultTargetMarket = campaignPreset.targetMarket
+  const defaultGoal = campaignPreset.goal
   const defaultProfile = useMemo(
     () => profileForProduct(product, userEmail, userName, selectedSenderEmail, initialProfile),
     [initialProfile, product, selectedSenderEmail, userEmail, userName],
@@ -251,12 +255,12 @@ export default function SalesAgent({
   const storageKey = `${STORAGE_KEY}:${userId}:${product}`
   const profileKey = `${PROFILE_KEY}:${userId}:${product}`
   const [step, setStep] = useState(1)
-  const [siteUrl, setSiteUrl] = useState('')
+  const [siteUrl, setSiteUrl] = useState(campaignPreset.websiteUrl)
   const [analysis, setAnalysis] = useState<SiteAnalysis | null>(null)
   const [targetMarket, setTargetMarket] = useState(defaultTargetMarket)
   const [goal, setGoal] = useState(defaultGoal)
-  const [hint, setHint] = useState('')
-  const [count, setCount] = useState(8)
+  const [hint, setHint] = useState(campaignPreset.hint)
+  const [count, setCount] = useState(14)
   const [result, setResult] = useState<LeadDiscoveryResult | null>(null)
   const [profile, setProfile] = useState<SenderProfile>(defaultProfile)
   const [drafts, setDrafts] = useState<Record<string, Draft>>({})
@@ -290,12 +294,12 @@ export default function SalesAgent({
   useEffect(() => {
     setHydratedStorageKey('')
     setStep(1)
-    setSiteUrl('')
+    setSiteUrl(campaignPreset.websiteUrl)
     setAnalysis(null)
     setTargetMarket(defaultTargetMarket)
     setGoal(defaultGoal)
-    setHint('')
-    setCount(8)
+    setHint(campaignPreset.hint)
+    setCount(14)
     setResult(null)
     setProfile(defaultProfile)
     setDrafts({})
@@ -350,11 +354,11 @@ export default function SalesAgent({
         if (saved.step && saved.step >= 1 && saved.step <= 4) {
           setStep(!currentLeadQuality && saved.step > 2 ? 2 : saved.step)
         }
-        setSiteUrl(saved.siteUrl || '')
+        setSiteUrl(saved.siteUrl || campaignPreset.websiteUrl)
         setAnalysis(saved.analysis || null)
         setTargetMarket(saved.targetMarket || defaultTargetMarket)
         setGoal(saved.goal || defaultGoal)
-        setHint(saved.hint || '')
+        setHint(saved.hint || campaignPreset.hint)
         if (saved.count && [5, 8, 10, 14].includes(saved.count)) setCount(saved.count)
         setResult(currentLeadQuality ? saved.result || null : null)
         const currentBulkTemplate = saved.bulkTemplateVersion === BULK_TEMPLATE_VERSION
@@ -371,7 +375,7 @@ export default function SalesAgent({
     } finally {
       setHydratedStorageKey(storageKey)
     }
-  }, [defaultBulkTemplate, defaultGoal, defaultProfile, defaultTargetMarket, product, profileKey, storageKey, userEmail, userId])
+  }, [campaignPreset.hint, campaignPreset.websiteUrl, defaultBulkTemplate, defaultGoal, defaultProfile, defaultTargetMarket, product, profileKey, storageKey, userEmail, userId])
 
   useEffect(() => {
     if (!hydrated) return
@@ -401,7 +405,7 @@ export default function SalesAgent({
     if (!hydrated) return
     if (!supabase) {
       setHistoryBusy(false)
-      setHistoryError('送信履歴を確認できないため、営業メールの作成を停止しています。')
+      setHistoryError('送信履歴を確認できないため実送信を停止しています。候補確認と文面作成は利用できます。')
       return
     }
     let cancelled = false
@@ -448,17 +452,19 @@ export default function SalesAgent({
       .map((item) => [item.toEmail.trim().toLowerCase(), item])),
     [product, sendHistory],
   )
-  const accepted = historyBusy || historyError ? [] : leadViews.filter((item) => (
-    item.validation.ok
-    && !excludedIds.includes(item.lead.id)
-    && !getSentHistory(item, sentHistoryByEmail)
-  ))
+  const historyReady = !historyBusy && !historyError
   const visibleProspects = leadViews.filter((item) => !excludedIds.includes(item.lead.id))
+  const draftableProspects = visibleProspects.filter((item) => (
+    !historyReady || !getSentHistory(item, sentHistoryByEmail)
+  ))
+  const accepted = !historyReady ? [] : draftableProspects.filter((item) => (
+    item.validation.ok
+  ))
   const needsContact = visibleProspects.filter((item) => !item.validation.ok)
   const sentProspects = visibleProspects.filter((item) => Boolean(getSentHistory(item, sentHistoryByEmail)))
   const manuallyExcluded = leadViews.filter((item) => excludedIds.includes(item.lead.id))
-  const drafted = accepted.filter((item) => Boolean(drafts[item.lead.id]))
-  const readyToSend = drafted.filter((item) => drafts[item.lead.id]?.state === 'ready')
+  const drafted = draftableProspects.filter((item) => Boolean(drafts[item.lead.id]))
+  const readyToSend = accepted.filter((item) => drafts[item.lead.id]?.state === 'ready')
   const profileComplete = Boolean(
     profile.senderName.trim()
     && profile.senderCompany.trim()
@@ -556,6 +562,69 @@ export default function SalesAgent({
     }
   }
 
+  async function startCampaign() {
+    if (!siteUrl.trim() || !targetMarket.trim() || !goal.trim()) {
+      setError('自社サイト、ターゲット市場、営業目的を確認してください。')
+      return
+    }
+
+    setBusy('campaign')
+    setError('')
+    setNotice('')
+    setResult(null)
+    setDrafts({})
+    setExcludedIds([])
+    const normalizedSiteUrl = normalizeUrl(siteUrl)
+    const controller = new AbortController()
+    const timeoutId = window.setTimeout(() => controller.abort(), 110_000)
+
+    try {
+      const analysisResponse = await apiFetch('/api/sales-agent/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({ websiteUrl: normalizedSiteUrl }),
+      })
+      const analysisData = await analysisResponse.json()
+      if (!analysisResponse.ok) throw new Error(analysisData.error || 'サイトを分析できませんでした。')
+      const nextAnalysis = analysisData.analysis as SiteAnalysis
+      setSiteUrl(normalizedSiteUrl)
+      setAnalysis(nextAnalysis)
+
+      const searchResponse = await apiFetch('/api/lead-discovery', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({
+          websiteUrl: normalizedSiteUrl,
+          targetMarket: targetMarket.trim(),
+          goal: [
+            goal.trim(),
+            `Ideal customers: ${nextAnalysis.idealCustomerProfile.join(' / ')}`,
+            hint.trim() ? `Additional conditions: ${hint.trim()}` : '',
+          ].filter(Boolean).join('. '),
+          maxLeads: count,
+          senderProfile: `${profile.senderName} — ${profile.senderCompany}`,
+        }),
+      })
+      const searchData = await searchResponse.json()
+      if (!searchResponse.ok) throw new Error(searchData.error || '見込み客を探せませんでした。')
+      const leadResult = searchData as LeadDiscoveryResult
+      setResult(leadResult)
+      setStep(2)
+      setNotice(leadResult.leads.length
+        ? `${product}向けの候補を${leadResult.leads.length}社確認しました。公開メールがない候補も、提案文の作成とコピーはできます。`
+        : '適合する候補を確認できませんでした。条件を変えて再検索してください。')
+    } catch (err) {
+      setError(err instanceof DOMException && err.name === 'AbortError'
+        ? '検索が110秒以内に完了しませんでした。条件を絞ってもう一度お試しください。'
+        : err instanceof Error ? err.message : '営業先を探せませんでした。')
+    } finally {
+      window.clearTimeout(timeoutId)
+      setBusy('')
+    }
+  }
+
   async function findLeads() {
     if (!analysis || !targetMarket.trim() || !goal.trim()) {
       setError('ターゲット市場と営業目的を入力してください。')
@@ -568,7 +637,7 @@ export default function SalesAgent({
     setDrafts({})
     setExcludedIds([])
     const controller = new AbortController()
-    const timeoutId = window.setTimeout(() => controller.abort(), 90_000)
+    const timeoutId = window.setTimeout(() => controller.abort(), 110_000)
     try {
       const response = await apiFetch('/api/lead-discovery', {
         method: 'POST',
@@ -597,7 +666,7 @@ export default function SalesAgent({
         : '条件に合う営業先を確認できませんでした。関係ない候補で件数を穴埋めはしていません。条件を変えて再検索してください。')
     } catch (err) {
       setError(err instanceof DOMException && err.name === 'AbortError'
-        ? '検索が90秒以内に完了しませんでした。処理を停止したので、もう一度お試しください。'
+        ? '検索が110秒以内に完了しませんでした。処理を停止したので、もう一度お試しください。'
         : err instanceof Error ? err.message : '見込み客を探せませんでした。')
     } finally {
       window.clearTimeout(timeoutId)
@@ -760,7 +829,7 @@ export default function SalesAgent({
   async function createAllDrafts() {
     setBusy('draft-all')
     setError('')
-    for (const item of accepted) {
+    for (const item of draftableProspects) {
       if (!drafts[item.lead.id]) await createDraft(item)
     }
     setBusy('')
@@ -774,7 +843,7 @@ export default function SalesAgent({
 
     const inferredLanguage: SenderProfile['language'] = /[ぁ-んァ-ヶ一-龠々]/.test(bulkTemplate.body) ? 'Japanese' : 'English'
     if (profile.language !== inferredLanguage) setProfile((current) => ({ ...current, language: inferredLanguage }))
-    const targets = accepted.filter((item) => drafts[item.lead.id]?.state !== 'sent')
+    const targets = draftableProspects.filter((item) => drafts[item.lead.id]?.state !== 'sent')
     setDrafts((current) => {
       const next = { ...current }
       for (const item of targets) {
@@ -876,11 +945,12 @@ export default function SalesAgent({
     if (!window.confirm('現在の分析・リード・下書きを消して、新しく始めますか？')) return
     localStorage.removeItem(storageKey)
     setStep(1)
-    setSiteUrl('')
+    setSiteUrl(campaignPreset.websiteUrl)
     setAnalysis(null)
     setTargetMarket(defaultTargetMarket)
     setGoal(defaultGoal)
-    setHint('')
+    setHint(campaignPreset.hint)
+    setCount(14)
     setResult(null)
     setDrafts({})
     setBulkTemplate(defaultBulkTemplate)
@@ -1118,60 +1188,67 @@ export default function SalesAgent({
           <section>
             <SectionHeading
               eyebrow="STEP 1"
-              title="まず、何を売っているかを読み取る。"
-              copy="自社サイトのURLだけで開始できます。読み取った内容は検索前に編集できます。"
+              title={`${product}の営業を、ここから始める。`}
+              copy="商材ごとの条件は入力済みです。必要なら直して、検索を1回押すだけです。"
             />
-            <div className="mt-7 flex flex-col gap-3 sm:flex-row">
-              <label className="sr-only" htmlFor="site-url">自社サイトURL</label>
-              <input
-                id="site-url"
-                type="url"
-                value={siteUrl}
-                onChange={(event) => setSiteUrl(event.target.value)}
-                onKeyDown={(event) => event.key === 'Enter' && analyzeSite()}
-                placeholder="https://your-company.com"
-                className="min-h-12 flex-1 rounded-md border border-[#cfd2cc] bg-white px-4 text-base outline-none focus:border-[#2b4c7e] focus:ring-3 focus:ring-[#2b4c7e]/10"
-              />
-              <PrimaryButton onClick={analyzeSite} disabled={!siteUrl.trim() || busy === 'analyze'}>
-                <Search size={17} />
-                {busy === 'analyze' ? 'サイトを読んでいます…' : 'サイトを分析'}
-              </PrimaryButton>
+            <div className="mt-7 rounded-lg border border-[#d9dbd5] bg-white p-5">
+              <div className="grid gap-4 md:grid-cols-2">
+                <Field label="自社サイト" required>
+                  <input
+                    id="site-url"
+                    type="url"
+                    value={siteUrl}
+                    onChange={(event) => setSiteUrl(event.target.value)}
+                    placeholder="https://your-company.com"
+                    className="field-input"
+                  />
+                </Field>
+                <Field label="ターゲット市場" required>
+                  <input value={targetMarket} onChange={(event) => setTargetMarket(event.target.value)} className="field-input" />
+                </Field>
+                <Field label="営業目的" required>
+                  <input value={goal} onChange={(event) => setGoal(event.target.value)} className="field-input" />
+                </Field>
+                <Field label="対象条件">
+                  <input value={hint} onChange={(event) => setHint(event.target.value)} className="field-input" />
+                </Field>
+              </div>
+              <div className="mt-5 flex flex-col gap-3 border-t border-[#e2e4df] pt-5 sm:flex-row sm:items-center sm:justify-between">
+                <label className="flex items-center gap-3 text-sm font-black">
+                  探す件数
+                  <select value={count} onChange={(event) => setCount(Number(event.target.value))} className="rounded-md border border-[#cfd2cc] bg-white px-3 py-2">
+                    {[5, 8, 10, 14].map((value) => <option key={value} value={value}>{value}社</option>)}
+                  </select>
+                </label>
+                <PrimaryButton onClick={() => void startCampaign()} disabled={!siteUrl.trim() || !targetMarket.trim() || !goal.trim() || busy === 'campaign'}>
+                  <Search size={17} />
+                  {busy === 'campaign' ? 'サイト分析と候補確認中…' : `${count}社の候補を探す`}
+                </PrimaryButton>
+              </div>
+              <p className="mt-3 text-xs font-semibold leading-5 text-[#6b7076]">この操作では送信しません。候補と文面を確認した後に、送信ごとの明示承認が必要です。</p>
             </div>
 
-            {analysis && (
-              <div className="mt-8 border-t border-[#d9dbd5] pt-7">
-                <div className="grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
+            {busy === 'campaign' && (
+              <div className="mt-6 rounded-lg border border-[#b8c6da] bg-[#f3f6fa] p-5" aria-live="polite">
+                <div className="flex items-center gap-3">
+                  <RefreshCw size={20} className="animate-spin text-[#2b4c7e]" />
                   <div>
-                    <p className="text-xs font-black tracking-[0.14em] text-[#bc3f34]">読み取り結果</p>
-                    <h2 className="mt-2 text-3xl font-black leading-tight">{analysis.company}</h2>
-                    <p className="mt-3 text-sm leading-7 text-[#5f656c]">{analysis.offering}</p>
-                    <div className="mt-5 border-l-3 border-[#2b4c7e] pl-4">
-                      <p className="text-xs font-bold text-[#6b7076]">顧客にとっての価値</p>
-                      <p className="mt-1 text-sm font-semibold leading-6">{analysis.valueProp}</p>
-                    </div>
+                    <p className="font-black text-[#1d2f4c]">{product}に合う営業先を確認しています</p>
+                    <p className="mt-1 text-sm font-semibold text-[#667080]">自社サイトの理解、候補の適合、公式出典、公開連絡先の順で確認します。</p>
                   </div>
-                  <div className="rounded-lg border border-[#d9dbd5] bg-[#fbfbf9] p-5">
-                    <label className="text-xs font-black tracking-[0.1em] text-[#6b7076]" htmlFor="icp">
-                      想定顧客（1行に1つ・編集可）
-                    </label>
-                    <textarea
-                      id="icp"
-                      value={analysis.idealCustomerProfile.join('\n')}
-                      onChange={(event) => setAnalysis({
-                        ...analysis,
-                        idealCustomerProfile: event.target.value.split('\n').map((item) => item.trim()).filter(Boolean),
-                      })}
-                      className="mt-3 min-h-36 w-full resize-y rounded-md border border-[#d9dbd5] bg-white p-3 text-sm leading-6 outline-none focus:border-[#2b4c7e]"
-                    />
-                  </div>
-                </div>
-                <div className="mt-6 flex justify-end">
-                  <PrimaryButton onClick={() => setStep(2)}>
-                    この内容で相手を探す <ArrowRight size={17} />
-                  </PrimaryButton>
                 </div>
               </div>
             )}
+
+            <details className="mt-5 rounded-lg border border-[#d9dbd5] bg-[#fbfbf9]">
+              <summary className="cursor-pointer px-5 py-4 text-sm font-black text-[#2b4c7e]">サイトだけを再分析する</summary>
+              <div className="border-t border-[#d9dbd5] p-5">
+                <SecondaryButton onClick={() => void analyzeSite()} disabled={!siteUrl.trim() || busy === 'analyze'}>
+                  <RefreshCw size={16} /> {busy === 'analyze' ? '分析中…' : 'サイト分析を更新'}
+                </SecondaryButton>
+                {analysis && <p className="mt-4 text-sm font-semibold leading-6 text-[#5f656c]">{analysis.company}: {analysis.offering}</p>}
+              </div>
+            </details>
           </section>
         )}
 
@@ -1237,7 +1314,7 @@ export default function SalesAgent({
                     <div className="flex items-center gap-3">
                       <RefreshCw size={20} className="animate-spin text-[#2b4c7e]" />
                       <div>
-                        <p className="font-black text-[#1d2f4c]">14社の公式情報を確認しています</p>
+                        <p className="font-black text-[#1d2f4c]">{count}社の公式情報を確認しています</p>
                         <p className="mt-1 text-sm font-semibold text-[#667080]">検索中の空リストは表示しません。完了した結果だけをここに出します。</p>
                       </div>
                     </div>
@@ -1257,9 +1334,9 @@ export default function SalesAgent({
                         <h2 className="mt-1 text-2xl font-black">{result.input.targetMarket || targetMarket}の営業先リスト</h2>
                         <p className="mt-2 text-sm font-semibold text-[#6b7076]">
                           {historyBusy
-                            ? '送信履歴と照合中…'
+                            ? `候補 ${visibleProspects.length}社 ／ 公開メール確認済み ${visibleProspects.filter((item) => item.validation.ok).length}社。送信履歴を照合中です。文面作成は進められます。`
                             : historyError
-                              ? '送信履歴を確認できないため、文面作成と送信を停止しています。'
+                              ? `候補 ${visibleProspects.length}社 ／ 公開メール確認済み ${visibleProspects.filter((item) => item.validation.ok).length}社。履歴を確認できないため送信だけ停止し、文面作成は利用できます。`
                               : `未送信・メール確認済み ${accepted.length}社 ／ 送信済み ${sentProspects.length}社 ／ 連絡先の確認が必要 ${needsContact.length}社`}
                         </p>
                       </div>
@@ -1308,11 +1385,11 @@ export default function SalesAgent({
                       </details>
                     )}
 
-                    {accepted.length > 0 && (
+                    {draftableProspects.length > 0 && (
                       <div className="mt-6 flex flex-col items-end gap-2">
-                        <p className="text-xs font-semibold text-[#6b7076]">公開メールを確認でき、かつ過去に送信していない会社だけを文面作成へ進めます。</p>
+                        <p className="text-xs font-semibold text-[#6b7076]">公開メールがない会社も、公式フォームやLinkedIn用の提案文を作成できます。実送信は確認済みメールだけです。</p>
                         <PrimaryButton onClick={() => setStep(3)}>
-                          {accepted.length}社の文面を書く <ArrowRight size={17} />
+                          {draftableProspects.length}社の文面を書く <ArrowRight size={17} />
                         </PrimaryButton>
                       </div>
                     )}
@@ -1330,7 +1407,7 @@ export default function SalesAgent({
               title="一つのテンプレを、全員分の文面にする。"
               copy="共通テンプレの宛名と会社名を自動で差し替えます。会社ごとの編集や、AIによる個別文面の作成もできます。"
             />
-            {!accepted.length ? (
+            {!draftableProspects.length ? (
               <MissingStep onClick={() => setStep(2)} label="先に出典付きの営業先を見つけてください。" />
             ) : (
               <>
@@ -1383,7 +1460,7 @@ export default function SalesAgent({
                   <div className="flex flex-col gap-2 border-b border-[#d9dbd5] pb-4 sm:flex-row sm:items-end sm:justify-between">
                     <div>
                       <p className="text-xs font-black tracking-[0.12em] text-[#2b4c7e]">一括テンプレ</p>
-                      <h2 className="mt-1 text-xl font-black">送信可能な{accepted.length}社すべてに反映</h2>
+                      <h2 className="mt-1 text-xl font-black">候補{draftableProspects.length}社すべてに反映</h2>
                     </div>
                     <p className="text-xs font-semibold text-[#6b7076]">送信済みのメールは上書きしません</p>
                   </div>
@@ -1442,14 +1519,14 @@ export default function SalesAgent({
                       onClick={applyBulkTemplate}
                       disabled={!bulkTemplate.subject.trim() || !bulkTemplate.body.trim() || !profile.senderName.trim() || !profile.senderCompany.trim()}
                     >
-                      <FilePenLine size={17} /> {accepted.length}社分を一括作成
+                      <FilePenLine size={17} /> {draftableProspects.length}社分を一括作成
                     </PrimaryButton>
                   </div>
                 </div>
 
                 <div className="mt-7 flex flex-col gap-3 border-b border-[#d9dbd5] pb-4 sm:flex-row sm:items-end sm:justify-between">
                   <div>
-                    <p className="text-xs font-black text-[#2b4c7e]">{drafted.length} / {accepted.length}通 作成済み</p>
+                    <p className="text-xs font-black text-[#2b4c7e]">{drafted.length} / {draftableProspects.length}通 作成済み</p>
                     <h2 className="mt-1 text-2xl font-black">メール下書き</h2>
                   </div>
                   <PrimaryButton onClick={createAllDrafts} disabled={busy === 'draft-all' || !profile.senderName || !profile.senderCompany}>
@@ -1458,14 +1535,14 @@ export default function SalesAgent({
                 </div>
 
                 <div className="mt-5 grid gap-4">
-                  {accepted.map((item) => {
+                  {draftableProspects.map((item) => {
                     const draft = drafts[item.lead.id]
                     return (
                       <article key={item.lead.id} className="rounded-lg border border-[#d9dbd5] bg-white p-5">
                         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                           <div>
                             <h3 className="text-lg font-black">{cleanOrganizationName(item.lead)}</h3>
-                            <p className="mt-1 text-xs font-semibold text-[#6b7076]">{item.contact?.email}</p>
+                            <p className="mt-1 text-xs font-semibold text-[#6b7076]">{item.validation.ok ? item.contact?.email : '公開メール未確認。本文をコピーして公式フォームやDMで利用できます。'}</p>
                           </div>
                           {!draft && (
                             <SecondaryButton onClick={() => createDraft(item)} disabled={draftingId === item.lead.id}>
@@ -1490,7 +1567,10 @@ export default function SalesAgent({
                             <div className="mt-3 whitespace-pre-wrap border-t border-dashed border-[#d9dbd5] pt-3 text-xs leading-6 text-[#6b7076]">
                               {buildFooter(profileComplete ? profile : { ...profile, senderName: profile.senderName || '氏名未入力' })}
                             </div>
-                            <div className="mt-4 flex justify-end">
+                            <div className="mt-4 flex flex-wrap justify-end gap-2">
+                              <SecondaryButton onClick={() => void copyText(`draft-${item.lead.id}`, `${prepareSalesBody(draft.body, profile)}\n\n${buildFooter(profile)}`)}>
+                                <Clipboard size={15} /> {copied === `draft-${item.lead.id}` ? 'コピー済み' : '本文をコピー'}
+                              </SecondaryButton>
                               <SecondaryButton onClick={() => createDraft(item)} disabled={draftingId === item.lead.id}>
                                 書き直す
                               </SecondaryButton>
@@ -1505,7 +1585,7 @@ export default function SalesAgent({
                 {drafted.length > 0 && (
                   <div className="mt-6 flex justify-end">
                     <PrimaryButton onClick={() => setStep(4)} disabled={!profileComplete}>
-                      {profileComplete ? `${drafted.length}通を確認して送る` : '必須の差出人情報を入力してください'} <ArrowRight size={17} />
+                      {profileComplete ? `${drafted.length}件を最終確認する` : '必須の差出人情報を入力してください'} <ArrowRight size={17} />
                     </PrimaryButton>
                   </div>
                 )}
@@ -1587,14 +1667,16 @@ export default function SalesAgent({
                       <div className="flex flex-col gap-3 border-b border-[#e2e4df] pb-4 sm:flex-row sm:items-start sm:justify-between">
                         <div>
                           <div className="flex flex-wrap items-center gap-2">
-                            <StatusPill state={draft.state} />
+                            {item.validation.ok
+                              ? <StatusPill state={draft.state} />
+                              : <span className="inline-flex items-center rounded-full bg-[#eef2f7] px-2.5 py-1 text-xs font-black text-[#2b4c7e]">文面準備完了</span>}
                             <span className="text-xs font-bold text-[#6b7076]">{item.validation.flags.join(' · ')}</span>
                           </div>
                           <h2 className="mt-2 text-xl font-black">{cleanOrganizationName(item.lead)}</h2>
                           <p className="mt-1 break-all text-sm font-semibold text-[#2b4c7e]">{contact?.email}</p>
                         </div>
-                        <a href={contact?.sourceUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-bold text-[#2b4c7e] underline">
-                          メールの出典 <ExternalLink size={13} />
+                        <a href={item.validation.ok ? contact?.sourceUrl : item.lead.sourceUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-bold text-[#2b4c7e] underline">
+                          {item.validation.ok ? 'メールの出典' : '候補の出典'} <ExternalLink size={13} />
                         </a>
                       </div>
                       <div className="mt-4">
@@ -1615,10 +1697,15 @@ export default function SalesAgent({
                         <SecondaryButton onClick={() => copyText(item.lead.id, fullEmail)}>
                           <Clipboard size={15} /> {copied === item.lead.id ? 'コピー済み' : '本文をコピー'}
                         </SecondaryButton>
-                        {draft.state !== 'sent' && draft.state !== 'sending' && confirmId !== item.lead.id && confirmId !== BULK_CONFIRM_ID && (
+                        {item.validation.ok && historyReady && draft.state !== 'sent' && draft.state !== 'sending' && confirmId !== item.lead.id && confirmId !== BULK_CONFIRM_ID && (
                           <PrimaryButton onClick={() => setConfirmId(item.lead.id)} disabled={!gmailConnected || busy === 'send-all'}>
                             <Mail size={17} /> 送信内容を最終確認
                           </PrimaryButton>
+                        )}
+                        {!item.validation.ok && (
+                          <a href={item.lead.organizationWebsite} target="_blank" rel="noreferrer" className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-[#cfd2cc] bg-white px-4 text-sm font-black text-[#30353b] hover:border-[#2b4c7e]">
+                            公式サイトを開く <ExternalLink size={14} />
+                          </a>
                         )}
                         {draft.state === 'sending' && (
                           <PrimaryButton onClick={() => undefined} disabled>
@@ -2103,6 +2190,30 @@ function prepareSalesBody(value: string, profile: SenderProfile) {
       : '',
   ].filter(Boolean)
   return additions.length ? `${body}\n\n${additions.join('\n\n')}` : body
+}
+
+function campaignPresetForProduct(product: SalesProduct): CampaignPreset {
+  const presets: Record<SalesProduct, CampaignPreset> = {
+    DOGEDAY: {
+      websiteUrl: 'https://ownthedoge.com/',
+      targetMarket: 'United States',
+      goal: 'Find DOGE DAY 2026 sponsors and activation partners with a credible fit for official Doge IP, internet culture, community, payments, gaming, entertainment, or consumer-brand collaboration.',
+      hint: 'Prioritize consumer brands, games, exchanges, wallets, collectibles, loyalty platforms, and entertainment companies. Exclude past partners, generic directories, unrelated B2B software, and media-only lists.',
+    },
+    ALTLIER: {
+      websiteUrl: 'https://altlier.io/',
+      targetMarket: 'Global',
+      goal: 'Find AI, Web3, developer-tool, and internet-product companies with concrete Japan or APAC expansion intent that may need hands-on local execution.',
+      hint: 'Require evidence of Japan or APAC activity, localization, hiring, partnerships, users, events, or expansion. Exclude companies with no visible regional intent.',
+    },
+    LOOQ: {
+      websiteUrl: 'https://www.looq.jp/',
+      targetMarket: 'Japan',
+      goal: 'Find Japanese DOOH media owners, digital-signage operators, OOH agencies, retail or venue operators, and infrastructure partners for a Verified Media Quality Pilot.',
+      hint: 'Only Japanese organizations with owned or operated physical media, signage, venues, retail locations, or OOH measurement needs. Exclude unrelated companies and overseas domains.',
+    },
+  }
+  return presets[product]
 }
 
 function initialProductForUser(email: string): SalesProduct {
