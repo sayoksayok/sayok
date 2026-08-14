@@ -20,6 +20,7 @@ import {
 import { useEffect, useMemo, useState } from 'react'
 import type { Contact, Lead, LeadDiscoveryResult } from '@/lib/lead-types'
 import { supabase } from '@/lib/supabase'
+import LinkedInSalesWorkspace, { type LinkedInProspect } from '@/components/LinkedInSalesWorkspace'
 
 type SiteAnalysis = {
   company: string
@@ -255,6 +256,7 @@ export default function SalesAgent({
   const storageKey = `${STORAGE_KEY}:${userId}:${product}`
   const profileKey = `${PROFILE_KEY}:${userId}:${product}`
   const [step, setStep] = useState(1)
+  const [outreachChannel, setOutreachChannel] = useState<'email' | 'linkedin'>('email')
   const [siteUrl, setSiteUrl] = useState(campaignPreset.websiteUrl)
   const [analysis, setAnalysis] = useState<SiteAnalysis | null>(null)
   const [targetMarket, setTargetMarket] = useState(defaultTargetMarket)
@@ -294,6 +296,7 @@ export default function SalesAgent({
   useEffect(() => {
     setHydratedStorageKey('')
     setStep(1)
+    setOutreachChannel('email')
     setSiteUrl(campaignPreset.websiteUrl)
     setAnalysis(null)
     setTargetMarket(defaultTargetMarket)
@@ -471,6 +474,16 @@ export default function SalesAgent({
     && profile.senderAddress.trim()
     && profile.senderContact.trim(),
   )
+  const linkedinProspects = useMemo<LinkedInProspect[]>(() => visibleProspects.map((item) => ({
+    id: item.lead.id,
+    organization: cleanOrganizationName(item.lead),
+    website: item.lead.organizationWebsite,
+    reason: item.lead.reasonForFit,
+    sourceUrl: item.lead.sourceUrl,
+    contactName: item.contact?.name || '',
+    contactTitle: item.contact?.title || '',
+    linkedinUrl: item.contact?.linkedinUrl || '',
+  })), [visibleProspects])
 
   async function apiFetch(path: string, init?: RequestInit) {
     if (!supabase) throw new Error('ログイン機能が設定されていません。')
@@ -1002,7 +1015,7 @@ export default function SalesAgent({
             </div>
             <div className="min-w-0">
               <p className="text-lg font-black">SayOK</p>
-              <p className="truncate text-xs font-semibold text-[#6b7076]">見込み客発掘・営業メールエージェント</p>
+              <p className="truncate text-xs font-semibold text-[#6b7076]">メール・LinkedIn営業ワークスペース</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -1404,10 +1417,43 @@ export default function SalesAgent({
           <section>
             <SectionHeading
               eyebrow="STEP 3"
-              title="一つのテンプレを、全員分の文面にする。"
-              copy="共通テンプレの宛名と会社名を自動で差し替えます。会社ごとの編集や、AIによる個別文面の作成もできます。"
+              title="送る文面を作り、次のフォローまで決める。"
+              copy="メールは送信まで、LinkedInは接続文・初回DM・フォロー作成と実行記録までを、同じ営業先で管理します。"
             />
-            {!draftableProspects.length ? (
+            <div className="mt-7 inline-grid grid-cols-2 border border-[#cfd2cc] bg-white p-1" role="tablist" aria-label="営業チャネル">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={outreachChannel === 'email'}
+                onClick={() => setOutreachChannel('email')}
+                className={`min-w-36 px-4 py-2.5 text-sm font-black ${outreachChannel === 'email' ? 'bg-[#202a3a] text-white' : 'text-[#5b6269]'}`}
+              >
+                メール
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={outreachChannel === 'linkedin'}
+                onClick={() => setOutreachChannel('linkedin')}
+                className={`min-w-36 px-4 py-2.5 text-sm font-black ${outreachChannel === 'linkedin' ? 'bg-[#0a66c2] text-white' : 'text-[#5b6269]'}`}
+              >
+                LinkedIn
+              </button>
+            </div>
+            {outreachChannel === 'linkedin' ? (
+              <div className="mt-6">
+                <LinkedInSalesWorkspace
+                  userId={userId}
+                  product={product}
+                  prospects={linkedinProspects}
+                  senderName={profile.senderName}
+                  senderCompany={profile.senderCompany}
+                  offering={analysis?.offering || ''}
+                  serviceNote={profile.serviceNote}
+                  language={profile.language}
+                />
+              </div>
+            ) : !draftableProspects.length ? (
               <MissingStep onClick={() => setStep(2)} label="先に出典付きの営業先を見つけてください。" />
             ) : (
               <>

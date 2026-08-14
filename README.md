@@ -132,11 +132,23 @@ npm run sales-agent:domain-auth
   appended to prepared messages.
 - Mass email campaigns are out of scope.
 
+## LinkedIn Sales Workflow
+
+The lead-review step supports both email and LinkedIn. For every accepted prospect,
+the LinkedIn workspace can open a company-and-role people search, store a manually
+verified profile URL, and prepare a connection note, first message, and follow-up.
+Users explicitly send inside LinkedIn, then record sent, replied, meeting, snoozed,
+or dismissed status in SayOK. Due follow-ups appear in the workspace automatically.
+
+SayOK does not scrape LinkedIn or send invitations and messages in the background.
+LinkedIn sales integrations beyond this owner-approved workflow require access to
+LinkedIn's restricted partner APIs.
+
 ## Verification
 
 ```bash
 npx tsc --noEmit
-npx eslint src/components/SalesAgent.tsx src/components/SalesAgentGate.tsx src/app/api/sales-agent
+npx eslint src/components/SalesAgent.tsx src/components/LinkedInSalesWorkspace.tsx src/components/SalesAgentGate.tsx src/app/api/sales-agent
 npm run test:sales-domain-auth
 npm run build -- --webpack
 ```
@@ -152,7 +164,8 @@ URL analysis
 -> lead discovery
 -> evidence review
 -> sender profile
--> message generation
+-> email or LinkedIn message generation
+-> follow-up scheduling
 -> owner confirmation
 -> Gmail API send
 ```
